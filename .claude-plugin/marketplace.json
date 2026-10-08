@@ -1,0 +1,24 @@
+{
+  "name": "ngram-skills",
+  "description": "日本語の技術文書とGitの作業手順のSkill",
+  "owner": {
+    "name": "ngram"
+  },
+  "plugins": [
+    {
+      "name": "git-commit",
+      "source": "./git-commit",
+      "description": "Git のステージング、日本語のコミットメッセージ案の作成、コミットの手順と書式。"
+    },
+    {
+      "name": "japanese-tech-writing",
+      "source": "./japanese-tech-writing",
+      "description": "日本語の技術文書・書籍原稿の文章規範。"
+    },
+    {
+      "name": "plan-review",
+      "source": "./plan-review",
+      "description": "plan/ 配下の Plan ファイルを Codex にレビューさせ、履歴を plan/.reviews/ に蓄積して diff を表示する。"
+    }
+  ]
+}
