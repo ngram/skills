@@ -19,6 +19,11 @@
       "name": "plan-review",
       "source": "./plan-review",
       "description": "plan/ 配下の Plan ファイルを Codex にレビューさせ、履歴を plan/.reviews/ に蓄積して diff を表示する。"
+    },
+    {
+      "name": "repo-privacy-audit",
+      "source": "./repo-privacy-audit",
+      "description": "リポジトリと公開済みのパッケージに、個人情報・秘密情報・機微情報が含まれていないかを調べ、値を伏せて報告する。"
     }
   ]
 }
