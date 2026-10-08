@@ -55,6 +55,6 @@ Skillの内容は[SKILL.md](./SKILL.md)にある。
 
 - 作者：keiichiro shikano
 - 取り込み元：<https://gist.github.com/fd287c3133457c4fd8f5601d34aa817d>（コミット`8f2d576`）
-- ライセンス：Unlicense（<https://gist.github.com/k16shikano/67625f2a7d96e3bbdfae8d571a936063>）
+- ライセンス：Unlicense（<https://gist.github.com/k16shikano/67625f2a7d96e3bbdfae8d571a936063>）。作者がこのgistに置いた本文を、そのまま[LICENSE.txt](./LICENSE.txt)に収録した
 
 `SKILL.md`は取り込み元と同じ内容に保つ（改行をLFにそろえた以外は変えていない）。内容の変更は取り込み元に提案する。

@@ -4,6 +4,7 @@ description: plan/ 配下の Plan ファイルを Codex にレビューさせ、
 argument-hint: "[plan-file-name]"
 disable-model-invocation: true
 compatibility: Claude Code向け（引数の置換とdisable-model-invocationを使う）。bashとcodex CLIが必要
+license: MIT
 ---
 
 # /plan-review — Plan を Codex でレビューしてdiffを表示する

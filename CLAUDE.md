@@ -9,3 +9,4 @@ Skillを個別にインストールできるように配布するリポジトリ
 - テストはSkillのディレクトリではなく`tests/`に置く。Skillのディレクトリの中身は、すべて利用者の環境にコピーされる
 - `gh skill install`で入れたコピー（frontmatterに`metadata.github-*`がある）を戻さない。`gh skill publish`がエラーにする
 - `japanese-tech-writing/SKILL.md`は取り込み元のgistと同じ内容に保ち、変更は取り込み元に提案する
+- ライセンスはfrontmatterの`license`に書く。MIT以外にするSkillは、ライセンスの本文を`LICENSE.txt`としてSkillのディレクトリに置く。明示していないSkillは、ルートの`LICENSE`（MIT）とする

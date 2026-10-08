@@ -23,14 +23,14 @@ Claude Codeのプラグインとして入れたSkillは、`/<name>:<name>`の形
 <!-- skills:list:begin（scripts/sync-skills.mjs が生成する。このブロックは手で編集しない） -->
 | Skill | 説明 | 必要なもの | ライセンス |
 | --- | --- | --- | --- |
-| [git-commit](git-commit/) | Git のステージング、日本語のコミットメッセージ案の作成、コミットの手順と書式。 | gitとNode.js 18以降が必要 | 未設定 |
+| [git-commit](git-commit/) | Git のステージング、日本語のコミットメッセージ案の作成、コミットの手順と書式。 | gitとNode.js 18以降が必要 | MIT |
 | [japanese-tech-writing](japanese-tech-writing/) | 日本語の技術文書・書籍原稿の文章規範。 | なし | Unlicense（https://gist.github.com/k16shikano/67625f2a7d96e3bbdfae8d571a936063） |
-| [plan-review](plan-review/) | plan/ 配下の Plan ファイルを Codex にレビューさせ、履歴を plan/.reviews/ に蓄積して diff を表示する。 | Claude Code向け（引数の置換とdisable-model-invocationを使う）。bashとcodex CLIが必要 | 未設定 |
+| [plan-review](plan-review/) | plan/ 配下の Plan ファイルを Codex にレビューさせ、履歴を plan/.reviews/ に蓄積して diff を表示する。 | Claude Code向け（引数の置換とdisable-model-invocationを使う）。bashとcodex CLIが必要 | MIT |
 <!-- skills:list:end -->
 
 `git-commit`は、`japanese-tech-writing`が入っていればその規範でコミットメッセージ案を点検する。
 
-`japanese-tech-writing`は、keiichiro shikano氏が[gist](https://gist.github.com/fd287c3133457c4fd8f5601d34aa817d)で公開しているSkillを、内容を変えずに収録したものである（Unlicense）。
+`japanese-tech-writing`は、keiichiro shikano氏が[gist](https://gist.github.com/fd287c3133457c4fd8f5601d34aa817d)で公開しているSkillを、内容を変えずに収録したものである（Unlicense。「ライセンス」の節）。
 
 ## 版の固定
 
@@ -46,3 +46,8 @@ Claude Codeのプラグインとして入れたSkillは、`/<name>:<name>`の形
 - Skillを足したり、frontmatterを変えたりしたら、`node scripts/sync-skills.mjs`を実行する。各SkillのREADMEのインストール手順、`.claude-plugin/marketplace.json`、上のSkill一覧が生成される
 - `node scripts/sync-skills.mjs --check`と`node --test tests/*.test.mjs`はCIでも実行する。CIでは`claude plugin validate .`と`gh skill publish --dry-run`もかける
 - リリースは`gh skill publish --tag v0.1.0`で作る
+
+## ライセンス
+
+Skillごとに独自のライセンスを持つことがある。その場合は、Skillのディレクトリにある`LICENSE.txt`を参照する（`japanese-tech-writing`はUnlicense）。
+ライセンスを明示していないSkillは、[MIT License](LICENSE)とする。

@@ -2,6 +2,7 @@
 name: git-commit
 description: Git のステージング、日本語のコミットメッセージ案の作成、コミットの手順と書式。1行目は Conventional Commits の型と体言止めの内容、本文は「問題・対応・テスト・影響」の節に分けた体言止めの箇条書き、1行目は表示幅72桁以内で本文は折り返さない、Co-Authored-By なし。リポジトリに commit.template（.gitmessage）があれば、書式はそちらを優先する。案は japanese-tech-writing の規範と textlint で点検し、ユーザーが「コミットして」と言うまでコミットしない。ステージしてほしい、コミットメッセージ案を出してほしい、コミットしてほしいと頼まれたときに使用する。
 compatibility: gitとNode.js 18以降が必要
+license: MIT
 ---
 
 # 日本語のコミットメッセージとコミットの手順
