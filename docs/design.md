@@ -7,12 +7,20 @@ zipを展開した3つのSkillを、1つのGitHubリポジトリ（`ngram/skills
 
 | Skill | ファイル | 作者・ライセンス | 実行に必要なもの |
 |---|---|---|---|
-| `git-commit` | `SKILL.md`、`scripts/check_message.mjs`、`assets/gitmessage` | ngram・未設定 | git、Node.js 18以降 |
-| `japanese-tech-writing` | `SKILL.md` | keiichiro shikano・Unlicense | なし |
-| `plan-review` | `SKILL.md` | ngram・未設定 | bash、codex CLI |
+| `git-commit` | `SKILL.md`、`scripts/check_message.mjs`、`assets/gitmessage` | ngram・MIT | git、Node.js 18以降 |
+| `japanese-tech-writing` | `SKILL.md`、`LICENSE.txt` | keiichiro shikano・Unlicense | なし |
+| `plan-review` | `SKILL.md` | ngram・MIT | bash、codex CLI |
 
 `japanese-tech-writing`は、gist（`fd287c3133457c4fd8f5601d34aa817d`）のコミット`8f2d576`と同じ内容である（改行だけLFにそろえた）。
 zipに入っていたこのgistのクローン（`.git`）は収録していない。
+
+## ライセンス
+
+[mizchi/skills](https://github.com/mizchi/skills#license)と同じく、Skillごとに独自のライセンスを持てるようにし、明示していないSkillはMITとする。
+
+- ルートの`LICENSE`：MIT License（Copyright (c) 2026 ngram）
+- `git-commit`と`plan-review`：frontmatterに`license: MIT`
+- `japanese-tech-writing`：Unlicense。frontmatterの`license`が指すgistに作者が置いた本文を、`japanese-tech-writing/LICENSE.txt`としてそのまま収録した。Skillのディレクトリごと利用者の環境にコピーされるので、ライセンスの本文も一緒に届く
 
 ## 個別にインストールする経路
 
@@ -139,7 +147,8 @@ pushとプルリクエストで`.github/workflows/skills.yml`が次を実行す�
 - APM 0.33.0：`apm install <パス>/plan-review`、`<パス>/git-commit`、`apm install -g <パス>/git-commit`のどれでも、原本と一致するファイルが`.claude/skills/`に入った
 - `scripts/sync-skills.mjs --check`：nameの不一致、CRLF、`hooks/`の追加、生成物のずれを壊したコピーで検出した
 
+ライセンスを付けた後は、`gh skill publish --dry-run`の`license`の警告が消え、残る警告はタグの保護ルールが無いことだけになった。
+
 ## 決めてほしいこと
 
-1. `git-commit`と`plan-review`のライセンス（MIT、Unlicense、Apache-2.0など）。決まったらfrontmatterに`license`を足し、`LICENSE`を置く
-2. 「apx」が上の解釈（APMか`npx skills`）で合っているか
+1. 「apx」が上の解釈（APMか`npx skills`）で合っているか
