@@ -2,3 +2,4 @@ node_modules/
 apm_modules/
 .DS_Store
 .claude/settings.local.json
+dist/
