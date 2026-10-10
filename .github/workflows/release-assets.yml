@@ -1,0 +1,39 @@
+# リリースを公開したときに、Skill ごとの ZIP（<name>.zip）を作ってリリースに添付する。
+# ZIP は claude.ai の Customize > Skills にそのままアップロードできる形で、scripts/package-skills.mjs が作る。
+#
+# 不変リリース（immutable releases）を有効にすると、公開したリリースには添付できない。
+# その場合は、タグを push して下書きのリリースを作り、このワークフローを workflow_dispatch で実行してから公開する。
+name: release-assets
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: ZIPを添付するリリースのタグ（例：v0.1.0）
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.TAG }}
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Build a ZIP per skill
+        run: node scripts/package-skills.mjs --out dist
+      - name: Attach the ZIPs to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" dist/*.zip --clobber --repo "$GITHUB_REPOSITORY"

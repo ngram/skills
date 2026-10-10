@@ -16,6 +16,16 @@
 
 導入後は`/plan-review:plan-review`で呼び出せる。
 
+### claude.ai（Cowork・クラウドセッション）
+
+[最新のリリース](https://github.com/ngram/skills/releases/latest)に添付した`plan-review.zip`をダウンロードし、claude.aiのCustomize > Skillsで「+」→「Create skill」→「Upload a skill」の順に進んでアップロードする。最新版のZIPは次のURLでも取得できる。
+
+```text
+https://github.com/ngram/skills/releases/latest/download/plan-review.zip
+```
+
+claude.aiに入れたSkillは、Coworkとクラウドセッション、claude.aiにログインした手元のClaude Codeにも同期される。更新するときは、新しい版のZIPをアップロードし直す。
+
 ### GitHub CLI（gh skill、gh 2.90以降）
 
 ```bash

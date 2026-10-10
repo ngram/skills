@@ -29,6 +29,7 @@ zipに入っていたこのgistのクローン（`.git`）は収録していな�
 | 経路 | 利用者の操作 | リポジトリ側に要るもの |
 |---|---|---|
 | Claude Code・Claude Desktop（プラグイン） | `/plugin marketplace add ngram/skills`のあと`/plugin install <name>@ngram-skills` | `.claude-plugin/marketplace.json` |
+| claude.ai（Cowork・クラウドセッション） | リリースに添付した`<name>.zip`を、claude.aiのCustomize > Skillsでアップロード | リリースへのZIPの添付（`.github/workflows/release-assets.yml`） |
 | GitHub CLI（gh 2.90以降） | `gh skill install ngram/skills <name> --agent claude-code --scope user` | `<name>/SKILL.md`。検索には`agent-skills`トピック、版の固定にはGitHub Release |
 | APM（Microsoft Agent Package Manager） | `apm install -g ngram/skills/<name>` | `<name>/SKILL.md` |
 | skills CLI（`npx skills`） | `npx skills add ngram/skills --skill <name>` | `<name>/SKILL.md` |
@@ -38,6 +39,9 @@ zipに入っていたこのgistのクローン（`.git`）は収録していな�
 
 APMはサブディレクトリのパス（`ngram/skills/<name>`）を指定すると、直下に`SKILL.md`がある1つのSkillとして入れる。
 このため、最初の設計で置く予定だったリポジトリ直下の`apm.yml`は不要になった。
+
+claude.aiの個人のSkillは、画面からZIPをアップロードする方法しか無い。APIでアップロードしたSkill（`/v1/skills`）はclaude.aiでは使えず、クラウドセッションはリポジトリの`.claude/settings.json`で指定したプラグインも読まない。
+そこで、アップロードするZIPをリリースに添付して、利用者の手作業をダウンロードとアップロードだけにした。
 
 ## リポジトリの構成
 
@@ -57,8 +61,11 @@ APMはサブディレクトリのパス（`ngram/skills/<name>`）を指定す�
 │   ├── SKILL.md
 │   └── README.md
 ├── scripts/sync-skills.mjs     生成と検査のスクリプト
+├── scripts/package-skills.mjs  claude.ai向けのSkillごとのZIPを作るスクリプト
 ├── tests/check_message.test.mjs
+├── tests/package-skills.test.mjs
 ├── .github/workflows/skills.yml
+├── .github/workflows/release-assets.yml  リリースにSkillごとのZIPを添付する
 ├── .gitattributes              * text=auto eol=lf
 ├── .gitignore
 ├── CLAUDE.md                   保守の決まり
@@ -126,14 +133,16 @@ APMはサブディレクトリのパス（`ngram/skills/<name>`）を指定す�
 
 - 版はリポジトリ全体で1つのsemverのタグにする（`v0.1.0`から）
 - リリースは`gh skill publish --tag v0.1.0`で作る。このコマンドが検証、`agent-skills`トピックの追加、GitHub Releaseの作成を行い、不変リリース（immutable releases）の有効化も提案する
-- 利用者は、gh skillでは`<name>@v0.1.0`、APMでは`ngram/skills/<name>#v0.1.0`、Claude Codeでは`/plugin marketplace add ngram/skills@v0.1.0`で版を固定できる
+- 利用者は、gh skillでは`<name>@v0.1.0`、APMでは`ngram/skills/<name>#v0.1.0`、Claude Codeでは`/plugin marketplace add ngram/skills@v0.1.0`で版を固定できる。claude.aiでは、そのタグのリリースに添付した`<name>.zip`をアップロードする
+- リリースを公開すると、`.github/workflows/release-assets.yml`がタグの内容から`scripts/package-skills.mjs`でSkillごとのZIPを作り、リリースに添付する。ZIPは`git archive`で作るので、gitが管理しているファイルだけが入り、ルートにSkillのディレクトリが1つ置かれる（claude.aiはこの形を求める）。ファイル名を`<name>.zip`に固定したので、`https://github.com/ngram/skills/releases/latest/download/<name>.zip`が常に最新版を指す
+- 不変リリースを有効にすると、公開したリリースには添付できない。その場合は、タグをpushして下書きのリリースを作り、`release-assets`をworkflow_dispatchでタグを指定して実行してから公開する
 
 ## CI
 
 pushとプルリクエストで`.github/workflows/skills.yml`が次を実行する。
 
 - `node scripts/sync-skills.mjs --check`
-- `node --test tests/*.test.mjs`（`check_message.mjs`の動作確認）
+- `node --test tests/*.test.mjs`（`check_message.mjs`、`scan.mjs`、`package-skills.mjs`の動作確認）
 - `claude plugin validate .`
 - `gh skill publish --dry-run`
 

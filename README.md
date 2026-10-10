@@ -10,6 +10,7 @@
 | 経路 | コマンド |
 | --- | --- |
 | Claude Code・Claude Desktop（プラグイン） | `/plugin marketplace add ngram/skills`のあと`/plugin install <name>@ngram-skills` |
+| claude.ai（Cowork・クラウドセッション） | [リリース](https://github.com/ngram/skills/releases/latest)に添付した`<name>.zip`を、claude.aiのCustomize > Skillsでアップロード |
 | GitHub CLI（gh 2.90以降） | `gh skill install ngram/skills <name> --agent claude-code --scope user` |
 | [APM](https://github.com/microsoft/apm) | `apm install -g ngram/skills/<name>` |
 | [skills CLI](https://github.com/vercel-labs/skills) | `npx skills add ngram/skills --skill <name>` |
@@ -17,6 +18,8 @@
 
 Claude Codeのプラグインとして入れたSkillは、`/<name>:<name>`の形で呼び出す。
 `/<name>`で呼び出したいときは、gh skill、APM、skills CLIのどれかで`~/.claude/skills/`に入れる。
+
+claude.aiに入れたSkillは、Coworkとクラウドセッション、claude.aiにログインした手元のClaude Codeにも同期される。クラウドセッションは手元の`~/.claude/skills/`とプラグインを読まないので、クラウドセッションで使うときはこの経路で入れる。
 
 ## Skill一覧
 
@@ -40,13 +43,16 @@ Claude Codeのプラグインとして入れたSkillは、`/<name>:<name>`の形
 - gh skill：`gh skill install ngram/skills <name>@v0.1.0`（`--pin`を付けると`gh skill update`の対象から外れる）
 - APM：`apm install -g ngram/skills/<name>#v0.1.0`
 - Claude Code：`/plugin marketplace add ngram/skills@v0.1.0`
+- claude.ai：そのタグのリリースに添付した`<name>.zip`をアップロードする
 
 ## 開発
 
 - Skillは直下の`<name>/SKILL.md`に置き、ディレクトリ名とfrontmatterの`name`を一致させる
 - Skillを足したり、frontmatterを変えたりしたら、`node scripts/sync-skills.mjs`を実行する。各SkillのREADMEのインストール手順、`.claude-plugin/marketplace.json`、上のSkill一覧が生成される
 - `node scripts/sync-skills.mjs --check`と`node --test tests/*.test.mjs`はCIでも実行する。CIでは`claude plugin validate .`と`gh skill publish --dry-run`もかける
-- リリースは`gh skill publish --tag v0.1.0`で作る
+- リリースは`gh skill publish --tag v0.1.0`で作る。リリースを公開すると、`.github/workflows/release-assets.yml`がSkillごとのZIP（`<name>.zip`）を作ってリリースに添付する
+- 同じZIPは`node scripts/package-skills.mjs`で手元でも作れる（`dist/`に出力する）
+- 不変リリース（immutable releases）を有効にすると、公開したリリースにはZIPを添付できない。その場合は、タグをpushして下書きのリリースを作り、`release-assets`をworkflow_dispatchで実行してから公開する
 
 ## ライセンス
 
