@@ -50,9 +50,10 @@ claude.aiに入れたSkillは、Coworkとクラウドセッション、claude.ai
 - Skillは直下の`<name>/SKILL.md`に置き、ディレクトリ名とfrontmatterの`name`を一致させる
 - Skillを足したり、frontmatterを変えたりしたら、`node scripts/sync-skills.mjs`を実行する。各SkillのREADMEのインストール手順、`.claude-plugin/marketplace.json`、上のSkill一覧が生成される
 - `node scripts/sync-skills.mjs --check`と`node --test tests/*.test.mjs`はCIでも実行する。CIでは`claude plugin validate .`と`gh skill publish --dry-run`もかける
-- リリースは`gh skill publish --tag v0.1.0`で作る。リリースを公開すると、`.github/workflows/release-assets.yml`がSkillごとのZIP（`<name>.zip`）を作ってリリースに添付する
+- リリースは、Actionsの`release`ワークフローを「Run workflow」で版（`v0.1.0`など）を指定して実行して作る。CIと同じ検査を通したあと、`main`の最新のコミットにタグを付け、GitHub ReleaseとSkillごとのZIP（`<name>.zip`）をまとめて作る。タグをpushできない環境（クラウドセッションなど）からも使える
+- 手元で`gh skill publish --tag v0.1.0`を実行して作ってもよい。このコマンドは`agent-skills`トピックも付ける。公開すると、`.github/workflows/release-assets.yml`がZIPを作ってリリースに添付する
 - 同じZIPは`node scripts/package-skills.mjs`で手元でも作れる（`dist/`に出力する）
-- 不変リリース（immutable releases）を有効にすると、公開したリリースにはZIPを添付できない。その場合は、タグをpushして下書きのリリースを作り、`release-assets`をworkflow_dispatchで実行してから公開する
+- 不変リリース（immutable releases）を有効にしても、`release`ワークフローはそのまま使える。`gh skill publish`で作る場合は、公開したリリースにZIPを添付できないので、タグをpushして下書きのリリースを作り、`release-assets`をworkflow_dispatchで実行してから公開する
 
 ## ライセンス
 

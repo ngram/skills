@@ -1,0 +1,63 @@
+# 版を指定して、タグ、GitHub Release、Skill ごとの ZIP（<name>.zip）をまとめて作る。
+# Actions の画面で release を選び、「Run workflow」で版（例：v0.1.0）を入れて実行する。
+# タグを push できない環境（クラウドセッションなど）からでもリリースを作れるよう、gh skill publish の代わりに置いた。
+#
+# gh release create は、ZIP を下書きのリリースに添付し終えてから公開するので、不変リリースを有効にしても動く。
+# GITHUB_TOKEN で作ったリリースは他のワークフローを起動しないので、release-assets.yml は動かない（ZIP はここで添付する）。
+# agent-skills トピックは付けない。必要ならリポジトリの About から一度だけ付ける。
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 作る版（例：v0.1.0）
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ inputs.version }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check the version and the branch
+        run: |
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::版は v0.1.0 の形で指定する: $VERSION"
+            exit 1
+          fi
+          if [[ "$GITHUB_REF" != "refs/heads/$DEFAULT_BRANCH" ]]; then
+            echo "::error::リリースは $DEFAULT_BRANCH から作る（実行したブランチ: $GITHUB_REF）"
+            exit 1
+          fi
+          existing=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$VERSION" --jq "map(select(.ref == \"refs/tags/$VERSION\")) | length")
+          if [[ "$existing" != "0" ]]; then
+            echo "::error::タグ $VERSION はもうある"
+            exit 1
+          fi
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Check generated files and skill frontmatter
+        run: node scripts/sync-skills.mjs --check
+      - name: Test helper scripts
+        run: node --test tests/*.test.mjs
+      - name: Validate skills with gh skill
+        run: gh skill publish --dry-run
+      - name: Build a ZIP per skill
+        run: node scripts/package-skills.mjs --out dist
+      - name: Create the tag and the release with the ZIPs
+        run: gh release create "$VERSION" dist/*.zip --target "$GITHUB_SHA" --title "$VERSION" --generate-notes --repo "$GITHUB_REPOSITORY"

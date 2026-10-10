@@ -1,5 +1,6 @@
 # リリースを公開したときに、Skill ごとの ZIP（<name>.zip）を作ってリリースに添付する。
 # ZIP は claude.ai の Customize > Skills にそのままアップロードできる形で、scripts/package-skills.mjs が作る。
+# 手元の gh skill publish などで作ったリリースのためのもの。release.yml で作ったリリースには、release.yml が添付する。
 #
 # 不変リリース（immutable releases）を有効にすると、公開したリリースには添付できない。
 # その場合は、タグを push して下書きのリリースを作り、このワークフローを workflow_dispatch で実行してから公開する。
