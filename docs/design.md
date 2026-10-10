@@ -65,7 +65,8 @@ claude.aiの個人のSkillは、画面からZIPをアップロードする方法
 ├── tests/check_message.test.mjs
 ├── tests/package-skills.test.mjs
 ├── .github/workflows/skills.yml
-├── .github/workflows/release-assets.yml  リリースにSkillごとのZIPを添付する
+├── .github/workflows/release.yml  版を指定してタグ、リリース、ZIPを作る
+├── .github/workflows/release-assets.yml  公開したリリースにSkillごとのZIPを添付する
 ├── .gitattributes              * text=auto eol=lf
 ├── .gitignore
 ├── CLAUDE.md                   保守の決まり
@@ -132,10 +133,15 @@ claude.aiの個人のSkillは、画面からZIPをアップロードする方法
 ## 版とリリース
 
 - 版はリポジトリ全体で1つのsemverのタグにする（`v0.1.0`から）
-- リリースは`gh skill publish --tag v0.1.0`で作る。このコマンドが検証、`agent-skills`トピックの追加、GitHub Releaseの作成を行い、不変リリース（immutable releases）の有効化も提案する
+- リリースは、`.github/workflows/release.yml`をworkflow_dispatchで版を指定して実行して作る。版の形（`v0.1.0`）、実行したブランチが`main`であること、同じタグが無いことを確かめ、CIと同じ検査（`gh skill publish --dry-run`を含む）を通してから、`gh release create`でタグ、GitHub Release、SkillごとのZIPを作る
+  - タグをpushできない環境（クラウドセッションなど）からもリリースを作れるように、タグの作成をGitHub Actionsの中で行う
+  - `gh release create`はZIPを下書きのリリースに添付してから公開するので、不変リリース（immutable releases）を有効にしても動く
+  - GITHUB_TOKENで作ったリリースは他のワークフローを起動しないので、`release-assets.yml`は動かない。ZIPは`release.yml`が添付する
+  - `gh skill publish`と違い、`agent-skills`トピックは付けず、不変リリースの有効化も提案しない。どちらもリポジトリの設定から一度だけ行う
+- 手元の`gh skill publish --tag v0.1.0`でも作れる。このコマンドが検証、`agent-skills`トピックの追加、GitHub Releaseの作成を行い、不変リリースの有効化も提案する
 - 利用者は、gh skillでは`<name>@v0.1.0`、APMでは`ngram/skills/<name>#v0.1.0`、Claude Codeでは`/plugin marketplace add ngram/skills@v0.1.0`で版を固定できる。claude.aiでは、そのタグのリリースに添付した`<name>.zip`をアップロードする
-- リリースを公開すると、`.github/workflows/release-assets.yml`がタグの内容から`scripts/package-skills.mjs`でSkillごとのZIPを作り、リリースに添付する。ZIPは`git archive`で作るので、gitが管理しているファイルだけが入り、ルートにSkillのディレクトリが1つ置かれる（claude.aiはこの形を求める）。ファイル名を`<name>.zip`に固定したので、`https://github.com/ngram/skills/releases/latest/download/<name>.zip`が常に最新版を指す
-- 不変リリースを有効にすると、公開したリリースには添付できない。その場合は、タグをpushして下書きのリリースを作り、`release-assets`をworkflow_dispatchでタグを指定して実行してから公開する
+- ZIPは`scripts/package-skills.mjs`が`git archive`で作るので、gitが管理しているファイルだけが入り、ルートにSkillのディレクトリが1つ置かれる（claude.aiはこの形を求める）。ファイル名を`<name>.zip`に固定したので、`https://github.com/ngram/skills/releases/latest/download/<name>.zip`が常に最新版を指す
+- `gh skill publish`などでリリースを公開すると、`.github/workflows/release-assets.yml`がタグの内容からZIPを作って添付する。不変リリースを有効にしていると公開後には添付できないので、その場合はタグをpushして下書きのリリースを作り、`release-assets`をworkflow_dispatchでタグを指定して実行してから公開する
 
 ## CI
 
