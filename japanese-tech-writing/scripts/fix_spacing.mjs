@@ -89,6 +89,14 @@ function maskCode(line) {
   return line.replace(CODE_SPAN, (m, ticks) => ticks + "x".repeat(m.length - ticks.length * 2) + ticks);
 }
 
+// 日本語として扱う全角文字。全角の絵文字と記号（U+2300〜U+2BFF、U+1F000〜U+1FAFF）は、
+// 日本語ではないので除く（「🤖 Generated」の空白は変えない）。
+function isJapanese(ch) {
+  const cp = ch.codePointAt(0);
+  if ((cp >= 0x2300 && cp <= 0x2bff) || (cp >= 0x1f000 && cp <= 0x1faff)) return false;
+  return isFull(ch);
+}
+
 // 位置 i の直前の1文字（サロゲートペアの文字も1文字として返す）。
 function charBefore(s, i) {
   const cp = s.codePointAt(i - 1);
@@ -112,11 +120,11 @@ function findGaps(line) {
     let half;
     let at;
     let word;
-    if (isFull(left) && ASCII.test(right)) {
+    if (isJapanese(left) && ASCII.test(right)) {
       half = right;
       at = j;
       word = masked.slice(j).match(/^[!-~]+/u)[0];
-    } else if (ASCII.test(left) && isFull(right)) {
+    } else if (ASCII.test(left) && isJapanese(right)) {
       half = left;
       at = i - 1;
       word = masked.slice(0, i).match(/[!-~]+$/u)[0];
