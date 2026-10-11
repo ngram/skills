@@ -34,7 +34,7 @@ function zipEntries(file) {
   return names;
 }
 
-test("Skill ごとに、ルートに Skill のディレクトリが1つ入った ZIP を作る", () => {
+test("Skill ごとに、ルートに Skill のディレクトリが1つ入った ZIP と、同じ中身の .skill を作る", () => {
   const out = mkdtempSync(join(tmpdir(), "package-skills-"));
   const r = run("--out", out);
   assert.equal(r.status, 0, r.stderr);
@@ -45,6 +45,24 @@ test("Skill ごとに、ルートに Skill のディレクトリが1つ入った
     assert.ok(existsSync(file), `${name}.zip が無い`);
     const files = zipEntries(file).filter((p) => !p.endsWith("/"));
     assert.deepEqual(files.sort(), gitFiles("HEAD", `${name}/`).sort(), `${name}.zip の中身が git の管理するファイルと違う`);
+    const skill = join(out, `${name}.skill`);
+    assert.ok(existsSync(skill), `${name}.skill が無い`);
+    assert.ok(readFileSync(skill).equals(readFileSync(file)), `${name}.skill の中身が ${name}.zip と違う`);
+  }
+});
+
+test("frontmatter に skill-creator の検証が許していないキーがある Skill だけを警告する", () => {
+  const out = mkdtempSync(join(tmpdir(), "package-skills-"));
+  const r = run("--out", out);
+  assert.equal(r.status, 0, r.stderr);
+  const allowed = new Set(["name", "description", "license", "allowed-tools", "metadata", "compatibility"]);
+  const skills = gitFiles("HEAD").map((p) => p.match(/^([^./][^/]*)\/SKILL\.md$/)?.[1]).filter(Boolean);
+  for (const name of skills) {
+    const text = readFileSync(join(ROOT, name, "SKILL.md"), "utf8");
+    const keys = text.split("---")[1].split("\n").map((l) => l.match(/^([A-Za-z0-9_-]+):/)?.[1]).filter(Boolean);
+    const extra = keys.filter((k) => !allowed.has(k));
+    const warned = r.stderr.includes(`警告: ${name} の frontmatter`);
+    assert.equal(warned, extra.length > 0, `${name}: 許していないキー ${extra.join(", ") || "なし"}`);
   }
 });
 
