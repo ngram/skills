@@ -8,7 +8,7 @@ zipを展開した3つのSkillを、1つのGitHubリポジトリ（`ngram/skills
 | Skill | ファイル | 作者・ライセンス | 実行に必要なもの |
 |---|---|---|---|
 | `git-commit` | `SKILL.md`、`scripts/check_message.mjs`、`assets/gitmessage` | ngram・MIT | git、Node.js 18以降 |
-| `japanese-tech-writing` | `SKILL.md`、`scripts/fix_spacing.mjs`、`LICENSE.txt` | keiichiro shikano・Unlicense（足した部分も同じ） | なし（スクリプトにはNode.js 18以降） |
+| `japanese-tech-writing` | `SKILL.md`、`scripts/fix_spacing.mjs`、`LICENSE.txt`、`LICENSE-MIT.txt` | keiichiro shikano・Unlicense（ngram/skillsで足した部分はngram・MIT） | なし（スクリプトにはNode.js 18以降） |
 | `plan-review` | `SKILL.md` | ngram・MIT | bash、codex CLI |
 
 `japanese-tech-writing`は、gist（`fd287c3133457c4fd8f5601d34aa817d`）のコミット`8f2d576`の内容に、日本語と英数字の間の空白の節とスクリプトを足したものである（「各Skillに加えた変更」の節）。
@@ -20,7 +20,9 @@ zipに入っていたこのgistのクローン（`.git`）は収録していな�
 
 - ルートの`LICENSE`：MIT License（Copyright (c) 2026 ngram）
 - `git-commit`と`plan-review`：frontmatterに`license: MIT`
-- `japanese-tech-writing`：Unlicense。frontmatterの`license`が指すgistに作者が置いた本文を、`japanese-tech-writing/LICENSE.txt`としてそのまま収録した。Skillのディレクトリごと利用者の環境にコピーされるので、ライセンスの本文も一緒に届く
+- `japanese-tech-writing`：取り込み元の部分はUnlicense。取り込み元のfrontmatterの`license`が指していたgistに作者が置いた本文を、`japanese-tech-writing/LICENSE.txt`としてそのまま収録した。このリポジトリで足した部分（末尾の節、`scripts/fix_spacing.mjs`、frontmatterの`compatibility`の行）はMITで、本文を`japanese-tech-writing/LICENSE-MIT.txt`に置いた。Skillのディレクトリごと利用者の環境にコピーされるので、どちらの本文も一緒に届く
+  - frontmatterの`license`は、両方を示す`Unlicense AND MIT。取り込み元の部分はUnlicense（LICENSE.txt）、ngram/skillsで足した部分はMIT（LICENSE-MIT.txt）`に書き換えた。取り込み元の行のうち、書き換えたのはこの行だけである
+  - `scripts/fix_spacing.mjs`の先頭には`SPDX-License-Identifier: MIT`と著作権表示を、`SKILL.md`の足した節の目印のコメントには「MIT License」を書いた
 
 ## 個別にインストールする経路
 
@@ -123,7 +125,7 @@ claude.aiの個人のSkillは、画面からZIPをアップロードする方法
 
 ### japanese-tech-writing
 
-- 取り込み元の行は変えていない。出典は`japanese-tech-writing/README.md`の手書きの部分に書いた
+- 取り込み元の行は、frontmatterの`license`を除いて変えていない（「ライセンス」の節）。出典は`japanese-tech-writing/README.md`の手書きの部分に書いた
 - 末尾への「日本語と英数字の間の空白」の節の追加。`git-commit`はtextlintの自動修正（`ja-space-between-half-and-full-width`、`ja-space-around-code`）と`check_message.mjs`で日本語と英数字の間の空白を除いていたが、このSkillには無かった。textlintの設定が無いプロジェクトでも働くように、空白を除くスクリプト`scripts/fix_spacing.mjs`を添えた
   - `--fix`で除くのは、全角文字と英数字の間と、全角文字とインラインコードの間の空白。記号で始まる（または終わる）語の前後は、`check_message.mjs`と同じく場所を示すだけにした（取ると読みにくいときは括弧で示すため）
   - frontmatter、コードブロック、インラインコードの中、URLの前後、行頭の書式の記号の後ろ、表の区切りと強調の記号とHTMLのコメントの区切りの隣は変えない。空白を除くとMarkdownの解釈やURLの範囲が変わるため

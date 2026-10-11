@@ -1,7 +1,7 @@
 ---
 name: japanese-tech-writing
 description: 日本語の技術文書・書籍原稿の文章規範。段落と論証の構成（パラグラフライティング）、論証の厳密さ（ツッコミどころの除去）、読み手の負荷の管理、視点と語り、演出の抑制、LLM っぽい空句の禁止、翻訳調の比喩と擬人化の禁止（「運ぶ」「効く」「開かれた問い」など）、冗長の排除を定める。日本語で技術書の章、草稿、記事、解説文を書くとき、または推敲・リライトするときに使用する。
-license: Unlicense（https://gist.github.com/k16shikano/67625f2a7d96e3bbdfae8d571a936063）
+license: Unlicense AND MIT。取り込み元の部分はUnlicense（LICENSE.txt）、ngram/skillsで足した部分はMIT（LICENSE-MIT.txt）
 compatibility: 空白の検査と修正（scripts/fix_spacing.mjs）にはNode.js 18以降が必要
 ---
 
@@ -161,7 +161,7 @@ LLM は、日本語として存在しない言い回しを、次の三つの経�
 - その根拠は、著者の断定（「十分あり得る状況だ」）ではなく、読者自身の経験に訴える一般的事実や通説に求める（「この症状は珍しくないだろう」「〜という言い方もよく耳にする」）。
 - 確認していないことを、確認したかのように滑らかに書かない。
 
-<!-- ここから下の節はngram/skillsで足したもの（取り込み元のgistには無い） -->
+<!-- ここから下の節はngram/skillsで足したもの（取り込み元のgistには無い）。MIT License（LICENSE-MIT.txt） -->
 
 ## 日本語と英数字の間の空白
 
