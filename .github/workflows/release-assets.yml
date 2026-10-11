@@ -1,6 +1,9 @@
-# リリースを公開したときに、Skill ごとの ZIP（<name>.zip）を作ってリリースに添付する。
-# ZIP は claude.ai の Customize > Skills にそのままアップロードできる形で、scripts/package-skills.mjs が作る。
+# リリースを公開したときに、Skill ごとの ZIP（<name>.zip）と .skill（<name>.skill）を作ってリリースに添付する。
+# どちらも claude.ai の Customize > Skills にそのままアップロードできる形（中身は同じ）で、scripts/package-skills.mjs が作る。
 # 手元の gh skill publish などで作ったリリースのためのもの。release.yml で作ったリリースには、release.yml が添付する。
+#
+# 作るためのスクリプトは既定のブランチの最新のものを使い、中身はタグの版から取る。古いタグのリリースにも、
+# 今の形式のファイル（.skill など）を後から添付できる。中身が同じなら、作り直したファイルのバイト列も同じになる。
 #
 # 不変リリース（immutable releases）を有効にすると、公開したリリースには添付できない。
 # その場合は、タグを push して下書きのリリースを作り、このワークフローを workflow_dispatch で実行してから公開する。
@@ -12,7 +15,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: ZIPを添付するリリースのタグ（例：v0.1.0）
+        description: ZIPと.skillを添付するリリースのタグ（例：v0.1.0）
         required: true
         type: string
 
@@ -27,14 +30,15 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@v6
         with:
           node-version: 22
-      - name: Build a ZIP per skill
-        run: node scripts/package-skills.mjs --out dist
-      - name: Attach the ZIPs to the release
+      - name: Build a ZIP and a .skill per skill
+        run: node scripts/package-skills.mjs --ref "refs/tags/$TAG" --out dist
+      - name: Attach the ZIPs and the .skill files to the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$TAG" dist/*.zip --clobber --repo "$GITHUB_REPOSITORY"
+        run: gh release upload "$TAG" dist/*.zip dist/*.skill --clobber --repo "$GITHUB_REPOSITORY"

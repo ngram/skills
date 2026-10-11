@@ -1,9 +1,10 @@
-# 版を指定して、タグ、GitHub Release、Skill ごとの ZIP（<name>.zip）をまとめて作る。
+# 版を指定して、タグ、GitHub Release、Skill ごとの ZIP（<name>.zip）と .skill（<name>.skill）をまとめて作る。
 # Actions の画面で release を選び、「Run workflow」で版（例：v0.1.0）を入れて実行する。
 # タグを push できない環境（クラウドセッションなど）からでもリリースを作れるよう、gh skill publish の代わりに置いた。
 #
-# gh release create は、ZIP を下書きのリリースに添付し終えてから公開するので、不変リリースを有効にしても動く。
-# GITHUB_TOKEN で作ったリリースは他のワークフローを起動しないので、release-assets.yml は動かない（ZIP はここで添付する）。
+# gh release create は、ファイルを下書きのリリースに添付し終えてから公開するので、不変リリースを有効にしても動く。
+# GITHUB_TOKEN で作ったリリースは他のワークフローを起動しないので、release-assets.yml は動かない（ZIP と .skill はここで添付する）。
+# 検査は skills.yml（CI）と同じものをかける。
 # agent-skills トピックは付けない。必要ならリポジトリの About から一度だけ付ける。
 name: release
 
@@ -55,9 +56,11 @@ jobs:
         run: node scripts/sync-skills.mjs --check
       - name: Test helper scripts
         run: node --test tests/*.test.mjs
+      - name: Validate the Claude Code marketplace
+        run: npx --yes @anthropic-ai/claude-code@2.1.293 plugin validate .
       - name: Validate skills with gh skill
         run: gh skill publish --dry-run
-      - name: Build a ZIP per skill
+      - name: Build a ZIP and a .skill per skill
         run: node scripts/package-skills.mjs --out dist
-      - name: Create the tag and the release with the ZIPs
-        run: gh release create "$VERSION" dist/*.zip --target "$GITHUB_SHA" --title "$VERSION" --generate-notes --repo "$GITHUB_REPOSITORY"
+      - name: Create the tag and the release with the ZIPs and the .skill files
+        run: gh release create "$VERSION" dist/*.zip dist/*.skill --target "$GITHUB_SHA" --title "$VERSION" --generate-notes --repo "$GITHUB_REPOSITORY"
