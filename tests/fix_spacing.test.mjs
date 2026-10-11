@@ -78,6 +78,13 @@ test("CRLFの改行と先頭のBOMは、そのまま書き戻す", () => {
   assert.equal(r.after, `${BOM}これはAPIの説明。\r\n- 項目のCLI\r\n`);
 });
 
+test("絵文字と英数字の間の空白は変えない", () => {
+  const text = "🤖 Generated with Claude Code\n- ✅ Done の確認\n";
+  const r = fix(text);
+  assert.equal(r.after, "🤖 Generated with Claude Code\n- ✅ Doneの確認\n");
+  assert.equal(r.status, 0, r.stdout);
+});
+
 test("空白の無い文章は終了コード0", () => {
   const r = run("Claude Codeの設定を`git log`で確かめる。\n");
   assert.equal(r.status, 0, r.stdout);
