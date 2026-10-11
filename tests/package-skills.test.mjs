@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -34,36 +34,81 @@ function zipEntries(file) {
   return names;
 }
 
-test("Skill ごとに、ルートに Skill のディレクトリが1つ入った ZIP と、同じ中身の .skill を作る", () => {
+// HEAD の SKILL.md の frontmatter から、最上位のキーと、claude.ai のサポート外の印（metadata の claude-ai: unsupported）を読む。
+function frontmatterAtHead(name) {
+  const text = spawnSync("git", ["show", `HEAD:${name}/SKILL.md`], { cwd: ROOT, encoding: "utf8" }).stdout;
+  const body = text.split("---")[1].split("\n");
+  return {
+    keys: body.map((l) => l.match(/^([A-Za-z0-9_-]+):/)?.[1]).filter(Boolean),
+    claudeAiUnsupported: body.some((l) => /^\s+claude-ai:\s*unsupported\s*$/.test(l)),
+  };
+}
+
+const skillsAtHead = () => gitFiles("HEAD").map((p) => p.match(/^([^./][^/]*)\/SKILL\.md$/)?.[1]).filter(Boolean);
+
+test("Skill ごとに、ルートに Skill のディレクトリが1つ入った ZIP と同じ中身の .skill を作り、claude.ai のサポート外の Skill は作らない", () => {
   const out = mkdtempSync(join(tmpdir(), "package-skills-"));
   const r = run("--out", out);
   assert.equal(r.status, 0, r.stderr);
-  const skills = gitFiles("HEAD").map((p) => p.match(/^([^./][^/]*)\/SKILL\.md$/)?.[1]).filter(Boolean);
+  const skills = skillsAtHead();
   assert.ok(skills.length > 0);
   for (const name of skills) {
     const file = join(out, `${name}.zip`);
+    const skill = join(out, `${name}.skill`);
+    if (frontmatterAtHead(name).claudeAiUnsupported) {
+      assert.ok(!existsSync(file) && !existsSync(skill), `${name} は claude.ai のサポート外なのに作られた`);
+      assert.ok(r.stdout.includes(`省略: ${name}`), `${name} を省いたことが出力に無い`);
+      continue;
+    }
     assert.ok(existsSync(file), `${name}.zip が無い`);
     const files = zipEntries(file).filter((p) => !p.endsWith("/"));
     assert.deepEqual(files.sort(), gitFiles("HEAD", `${name}/`).sort(), `${name}.zip の中身が git の管理するファイルと違う`);
-    const skill = join(out, `${name}.skill`);
     assert.ok(existsSync(skill), `${name}.skill が無い`);
     assert.ok(readFileSync(skill).equals(readFileSync(file)), `${name}.skill の中身が ${name}.zip と違う`);
   }
 });
 
-test("frontmatter に skill-creator の検証が許していないキーがある Skill だけを警告する", () => {
+test("claude.ai のサポート外ではなく、frontmatter に skill-creator の検証が許していないキーがある Skill だけを警告する", () => {
   const out = mkdtempSync(join(tmpdir(), "package-skills-"));
   const r = run("--out", out);
   assert.equal(r.status, 0, r.stderr);
   const allowed = new Set(["name", "description", "license", "allowed-tools", "metadata", "compatibility"]);
-  const skills = gitFiles("HEAD").map((p) => p.match(/^([^./][^/]*)\/SKILL\.md$/)?.[1]).filter(Boolean);
-  for (const name of skills) {
-    const text = readFileSync(join(ROOT, name, "SKILL.md"), "utf8");
-    const keys = text.split("---")[1].split("\n").map((l) => l.match(/^([A-Za-z0-9_-]+):/)?.[1]).filter(Boolean);
-    const extra = keys.filter((k) => !allowed.has(k));
+  for (const name of skillsAtHead()) {
+    const fm = frontmatterAtHead(name);
+    const extra = fm.keys.filter((k) => !allowed.has(k));
     const warned = r.stderr.includes(`警告: ${name} の frontmatter`);
-    assert.equal(warned, extra.length > 0, `${name}: 許していないキー ${extra.join(", ") || "なし"}`);
+    assert.equal(warned, !fm.claudeAiUnsupported && extra.length > 0, `${name}: 許していないキー ${extra.join(", ") || "なし"}`);
   }
+});
+
+test("印の有無で、作るか省くかと警告が決まる（一時的なリポジトリで確かめる）", () => {
+  const repo = mkdtempSync(join(tmpdir(), "package-skills-repo-"));
+  const git = (...args) => {
+    const r = spawnSync("git", ["-c", "user.name=test", "-c", "user.email=test@example.com", ...args], { cwd: repo, encoding: "utf8" });
+    assert.equal(r.status, 0, r.stderr);
+  };
+  git("init", "-q");
+  mkdirSync(join(repo, "scripts"));
+  copyFileSync(SCRIPT, join(repo, "scripts", "package-skills.mjs"));
+  const skills = {
+    plain: "---\nname: plain\ndescription: 印も余分なキーも無い\n---\n",
+    extra: "---\nname: extra\ndescription: 余分なキーがある\nargument-hint: x\n---\n",
+    local: "---\nname: local\ndescription: claude.ai のサポート外\nargument-hint: x\nmetadata:\n  claude-ai: unsupported\n---\n",
+  };
+  for (const [name, text] of Object.entries(skills)) {
+    mkdirSync(join(repo, name));
+    writeFileSync(join(repo, name, "SKILL.md"), text);
+  }
+  git("add", "-A");
+  git("commit", "-q", "-m", "fixture");
+  const out = join(repo, "dist");
+  const r = spawnSync(process.execPath, [join(repo, "scripts", "package-skills.mjs"), "--out", out], { cwd: repo, encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(existsSync(join(out, "plain.skill")) && existsSync(join(out, "extra.skill")));
+  assert.ok(!existsSync(join(out, "local.skill")) && !existsSync(join(out, "local.zip")));
+  assert.match(r.stdout, /省略: local/);
+  assert.match(r.stderr, /警告: extra の frontmatter の argument-hint/);
+  assert.doesNotMatch(r.stderr, /警告: (plain|local) /);
 });
 
 test("知らないオプションは終了コード2", () => {
