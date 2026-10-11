@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 ngram（ライセンスの本文は ../LICENSE-MIT.txt）
+//
 // Markdown の原稿の、日本語（全角文字）と半角の語の間の空白を検査し、--fix で除く。
 // 依存パッケージは無く、Node.js 18 以降の標準機能だけで動く。
 //

@@ -69,9 +69,9 @@ Skillの内容は[SKILL.md](./SKILL.md)にある。
 - 取り込み元：<https://gist.github.com/fd287c3133457c4fd8f5601d34aa817d>（コミット`8f2d576`）
 - ライセンス：Unlicense（<https://gist.github.com/k16shikano/67625f2a7d96e3bbdfae8d571a936063>）。作者がこのgistに置いた本文を、そのまま[LICENSE.txt](./LICENSE.txt)に収録した
 
-`SKILL.md`は、取り込み元の内容に次の部分を足したものである。取り込み元の行は変えていない（改行をLFにそろえた以外）。
+`SKILL.md`は、取り込み元の内容に次の部分を足したものである。取り込み元の行は、frontmatterの`license`を除いて変えていない（改行をLFにそろえた以外）。`license`は、取り込み元の部分と足した部分のライセンスを示すように書き換えた。
 
 - 末尾の「日本語と英数字の間の空白」の節と、その節が使う`scripts/fix_spacing.mjs`。`git-commit`のSkillが行っている、日本語と英数字の間の空白の除去と検査を移植した
 - frontmatterの`compatibility`の行
 
-足した部分も、このSkillの他の部分と同じくUnlicenseとする。取り込み元の部分の変更は、取り込み元に提案する。
+足した部分は、ngram/skillsのほかのSkillと同じく[MIT License](./LICENSE-MIT.txt)とする（Copyright (c) 2026 ngram）。取り込み元の部分はUnlicenseのままである。取り込み元の部分の変更は、取り込み元に提案する。
