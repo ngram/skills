@@ -31,7 +31,7 @@ zipに入っていたこのgistのクローン（`.git`）は収録していな�
 | 経路 | 利用者の操作 | リポジトリ側に要るもの |
 |---|---|---|
 | Claude Code・Claude Desktop（プラグイン） | `/plugin marketplace add ngram/skills`のあと`/plugin install <name>@ngram-skills` | `.claude-plugin/marketplace.json` |
-| claude.ai（Cowork・クラウドセッション） | リリースに添付した`<name>.skill`（中身が同じ`<name>.zip`でもよい）を、claude.aiのCustomize > Skillsでアップロード | リリースへの`.skill`とZIPの添付（`release.yml`、`release-assets.yml`） |
+| claude.ai（Cowork・クラウドセッション） | リリースに添付した`<name>.skill`（中身が同じ`<name>.zip`でもよい）を、claude.aiのCustomize > Skillsでアップロード（`plan-review`はサポート外） | リリースへの`.skill`とZIPの添付（`release.yml`、`release-assets.yml`） |
 | GitHub CLI（gh 2.90以降） | `gh skill install ngram/skills <name> --agent claude-code --scope user` | `<name>/SKILL.md`。検索には`agent-skills`トピック、版の固定にはGitHub Release |
 | APM（Microsoft Agent Package Manager） | `apm install -g ngram/skills/<name>` | `<name>/SKILL.md` |
 | skills CLI（`npx skills`） | `npx skills add ngram/skills --skill <name>` | `<name>/SKILL.md` |
@@ -123,6 +123,7 @@ claude.aiの個人のSkillは、画面からZIPをアップロードする方法
 
 - frontmatterへの`compatibility: Claude Code向け（引数の置換とdisable-model-invocationを使う）。bashとcodex CLIが必要`の追加
 - 説明文の「ユーザーが /plan-review と明示的に指示したときだけ使う」は残した。`disable-model-invocation`を解さないホストでも、自動で呼ばれにくくなる
+- claude.aiのサポート外とし、frontmatterの`metadata`に`claude-ai: unsupported`を書いた。手元のcodex CLIを前提にするので、claude.aiのチャット、Cowork、クラウドセッションでは動かない。あわせて`compatibility`に「claude.aiはサポート外」を書き足した
 
 ### japanese-tech-writing
 
@@ -152,8 +153,9 @@ claude.aiの個人のSkillは、画面からZIPをアップロードする方法
 - 手元の`gh skill publish --tag v0.1.0`でも作れる。このコマンドが検証、`agent-skills`トピックの追加、GitHub Releaseの作成を行い、不変リリースの有効化も提案する
 - 利用者は、gh skillでは`<name>@v0.1.0`、APMでは`ngram/skills/<name>#v0.1.0`、Claude Codeでは`/plugin marketplace add ngram/skills@v0.1.0`で版を固定できる。claude.aiでは、そのタグのリリースに添付した`<name>.skill`をアップロードする
 - ZIPは`scripts/package-skills.mjs`が`git archive`で作るので、gitが管理しているファイルだけが入り、ルートにSkillのディレクトリが1つ置かれる（claude.aiはこの形を求める）。`.skill`はそのZIPの写しで、バイト列も同じである。ファイル名を`<name>.skill`と`<name>.zip`に固定したので、`https://github.com/ngram/skills/releases/latest/download/<name>.skill`が常に最新版を指す
-- `package-skills.mjs`は、frontmatterにskill-creatorの検証（`quick_validate.py`）が許していないキーがあると警告する。許すのは`name`、`description`、`license`、`allowed-tools`、`metadata`、`compatibility`の6つで、ほかのキーがあるとclaude.aiへのアップロードで拒否されることがある。GitHub Actionsの中では、警告を実行結果の注釈として出す
-  - `plan-review`は、Claude Code向けの`argument-hint`と`disable-model-invocation`を持つので警告が出る。`.skill`とZIPは作るが、claude.aiで使えるとは限らない
+- frontmatterの`metadata`に`claude-ai: unsupported`があるSkillは、claude.aiのサポート外として`.skill`とZIPを作らない。`sync-skills.mjs`も同じ印を見て、そのSkillのREADMEのclaude.aiの節をサポート外の案内にする。印をSkillのfrontmatterに置くのは、二つのスクリプトが同じところから判断でき、Skillを移しても印が一緒に移るためである。`metadata`はAgent Skillsの仕様が独自の情報のために用意した項目なので、ほかのツールの検証にもかからない
+- `package-skills.mjs`は、claude.aiのサポート外ではないSkillのfrontmatterに、skill-creatorの検証（`quick_validate.py`）が許していないキーがあると警告する。許すのは`name`、`description`、`license`、`allowed-tools`、`metadata`、`compatibility`の6つで、ほかのキーがあるとclaude.aiへのアップロードで拒否されることがある。GitHub Actionsの中では、警告を実行結果の注釈として出す
+  - `plan-review`は、Claude Code向けの`argument-hint`と`disable-model-invocation`を持つが、claude.aiのサポート外として作らないので警告も出ない
 - `gh skill publish`などでリリースを公開すると、`.github/workflows/release-assets.yml`がタグの内容から`.skill`とZIPを作って添付する。作るためのスクリプトは既定のブランチの最新のものを使うので、古いタグのリリースにも、workflow_dispatchでタグを指定して実行すれば今の形式のファイルを後から添付できる。不変リリースを有効にしていると公開後には添付できないので、その場合はタグをpushして下書きのリリースを作り、`release-assets`をworkflow_dispatchでタグを指定して実行してから公開する
 
 ## CI

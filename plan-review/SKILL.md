@@ -3,8 +3,10 @@ name: plan-review
 description: plan/ 配下の Plan ファイルを Codex にレビューさせ、履歴を plan/.reviews/ に蓄積して diff を表示する。ユーザーが /plan-review と明示的に指示したときだけ使う。
 argument-hint: "[plan-file-name]"
 disable-model-invocation: true
-compatibility: Claude Code向け（引数の置換とdisable-model-invocationを使う）。bashとcodex CLIが必要
+compatibility: Claude Code向け（引数の置換とdisable-model-invocationを使う）。手元のbashとcodex CLIが必要で、claude.aiはサポート外
 license: MIT
+metadata:
+  claude-ai: unsupported
 ---
 
 # /plan-review — Plan を Codex でレビューしてdiffを表示する

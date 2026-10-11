@@ -37,7 +37,8 @@ const PLUGIN_COMPONENT_DIRS = ["bin", "hooks", "agents", "commands", ".claude-pl
 // BOM、ゼロ幅文字、双方向制御文字。APM が「hidden characters」として警告する。
 const HIDDEN_CHARS = /[\uFEFF\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069]/u;
 
-// frontmatter の最上位の「キー: 値」だけを読む。値は1行のスカラーか、> と | のブロックスカラーに限る。
+// frontmatter の最上位の「キー: 値」だけを読む。値は1行のスカラーか、> と | のブロックスカラーか、
+// 1段だけ字下げした「キー: 値」の対応表（metadata など）に限る。
 function parseFrontmatter(text, path) {
   const lines = text.split("\n");
   if (lines[0] !== "---") throw new Error(`${path}: frontmatter が無い`);
@@ -49,7 +50,15 @@ function parseFrontmatter(text, path) {
     const m = body[i].match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
     if (!m) continue;
     const [, key, raw] = m;
-    if (raw === ">" || raw === "|" || raw === ">-" || raw === "|-") {
+    if (raw === "") {
+      // 値が空のキー（metadata など）は、字下げした「キー: 値」の行を対応表として読む。
+      const map = {};
+      while (i + 1 < body.length && /^\s+\S/.test(body[i + 1])) {
+        const mm = body[++i].match(/^\s+([A-Za-z0-9_-]+):\s*(.*)$/);
+        if (mm) map[mm[1]] = /^(["']).*\1$/.test(mm[2]) ? mm[2].slice(1, -1) : mm[2];
+      }
+      fields[key] = map;
+    } else if (raw === ">" || raw === "|" || raw === ">-" || raw === "|-") {
       const block = [];
       while (i + 1 < body.length && /^\s+\S/.test(body[i + 1])) block.push(body[++i].trim());
       fields[key] = raw.startsWith(">") ? block.join(" ") : block.join("\n");
@@ -112,17 +121,52 @@ function inspectSkill(dir) {
   else if ([...description].length > 1024) problems.push(`description が1024文字を超えている（${[...description].length}文字）`);
   if (compatibility && [...compatibility].length > 500) problems.push("compatibility が500文字を超えている");
   if (/^\s+github-/m.test(raw)) problems.push("gh skill install が書き込む metadata.github-* が残っている。導入したコピーではなく原本を置く");
+  const claudeAi = typeof fields.metadata === "object" ? fields.metadata["claude-ai"] : undefined;
+  if (claudeAi !== undefined && claudeAi !== "unsupported") {
+    problems.push(`metadata.claude-ai は unsupported だけを書ける（「${claudeAi}」になっている）`);
+  }
 
   for (const sub of PLUGIN_COMPONENT_DIRS) {
     if (existsSync(join(ROOT, dir, sub))) problems.push(`${sub}/ がある。Claude Code のプラグインの部品として読み込まれる`);
   }
-  return { dir, name: name ?? dir, description: description ?? "", compatibility, license: fields.license, problems };
+  return {
+    dir,
+    name: name ?? dir,
+    description: description ?? "",
+    compatibility,
+    license: fields.license,
+    claudeAiUnsupported: claudeAi === "unsupported",
+    problems,
+  };
 }
 
 // 説明文の最初の文。マーケットプレイスと一覧の短い説明に使う。
 function firstSentence(text) {
   const i = text.indexOf("。");
   return i === -1 ? text : text.slice(0, i + 1);
+}
+
+// README の claude.ai の節。frontmatter の metadata に claude-ai: unsupported があるSkillは、サポート外と案内する。
+function claudeAiSection(s) {
+  const head = ["### claude.ai（Cowork・クラウドセッション）", ""];
+  if (s.claudeAiUnsupported) {
+    return [
+      ...head,
+      "このSkillはclaude.aiのサポート外で、リリースに`.skill`とZIPを添付しない。手元のClaude Codeには、ほかの経路で入れる。",
+      "",
+    ];
+  }
+  return [
+    ...head,
+    `[最新のリリース](https://github.com/${REPO}/releases/latest)に添付した\`${s.name}.skill\`をダウンロードし、claude.aiのCustomize > Skillsで「+」→「Create skill」→「Upload a skill」の順に進んでアップロードする。同じ中身の\`${s.name}.zip\`も添付してあり、どちらをアップロードしてもよい。最新版は次のURLでも取得できる。`,
+    "",
+    "```text",
+    `https://github.com/${REPO}/releases/latest/download/${s.name}.skill`,
+    "```",
+    "",
+    "claude.aiに入れたSkillは、Coworkとクラウドセッション、claude.aiにログインした手元のClaude Codeにも同期される。更新するときは、新しい版の`.skill`をアップロードし直す。",
+    "",
+  ];
 }
 
 function skillReadmeBlock(s) {
@@ -146,16 +190,7 @@ function skillReadmeBlock(s) {
     "",
     `導入後は\`/${s.name}:${s.name}\`で呼び出せる。`,
     "",
-    "### claude.ai（Cowork・クラウドセッション）",
-    "",
-    `[最新のリリース](https://github.com/${REPO}/releases/latest)に添付した\`${s.name}.skill\`をダウンロードし、claude.aiのCustomize > Skillsで「+」→「Create skill」→「Upload a skill」の順に進んでアップロードする。同じ中身の\`${s.name}.zip\`も添付してあり、どちらをアップロードしてもよい。最新版は次のURLでも取得できる。`,
-    "",
-    "```text",
-    `https://github.com/${REPO}/releases/latest/download/${s.name}.skill`,
-    "```",
-    "",
-    "claude.aiに入れたSkillは、Coworkとクラウドセッション、claude.aiにログインした手元のClaude Codeにも同期される。更新するときは、新しい版の`.skill`をアップロードし直す。",
-    "",
+    ...claudeAiSection(s),
     "### GitHub CLI（gh skill、gh 2.90以降）",
     "",
     "```bash",

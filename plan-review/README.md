@@ -3,7 +3,7 @@
 
 > plan/ 配下の Plan ファイルを Codex にレビューさせ、履歴を plan/.reviews/ に蓄積して diff を表示する。ユーザーが /plan-review と明示的に指示したときだけ使う。
 
-必要なもの：Claude Code向け（引数の置換とdisable-model-invocationを使う）。bashとcodex CLIが必要
+必要なもの：Claude Code向け（引数の置換とdisable-model-invocationを使う）。手元のbashとcodex CLIが必要で、claude.aiはサポート外
 
 ## インストール
 
@@ -18,13 +18,7 @@
 
 ### claude.ai（Cowork・クラウドセッション）
 
-[最新のリリース](https://github.com/ngram/skills/releases/latest)に添付した`plan-review.skill`をダウンロードし、claude.aiのCustomize > Skillsで「+」→「Create skill」→「Upload a skill」の順に進んでアップロードする。同じ中身の`plan-review.zip`も添付してあり、どちらをアップロードしてもよい。最新版は次のURLでも取得できる。
-
-```text
-https://github.com/ngram/skills/releases/latest/download/plan-review.skill
-```
-
-claude.aiに入れたSkillは、Coworkとクラウドセッション、claude.aiにログインした手元のClaude Codeにも同期される。更新するときは、新しい版の`.skill`をアップロードし直す。
+このSkillはclaude.aiのサポート外で、リリースに`.skill`とZIPを添付しない。手元のClaude Codeには、ほかの経路で入れる。
 
 ### GitHub CLI（gh skill、gh 2.90以降）
 

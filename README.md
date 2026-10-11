@@ -10,7 +10,7 @@
 | 経路 | コマンド |
 | --- | --- |
 | Claude Code・Claude Desktop（プラグイン） | `/plugin marketplace add ngram/skills`のあと`/plugin install <name>@ngram-skills` |
-| claude.ai（Cowork・クラウドセッション） | [リリース](https://github.com/ngram/skills/releases/latest)に添付した`<name>.skill`（中身が同じ`<name>.zip`でもよい）を、claude.aiのCustomize > Skillsでアップロード |
+| claude.ai（Cowork・クラウドセッション） | [リリース](https://github.com/ngram/skills/releases/latest)に添付した`<name>.skill`（中身が同じ`<name>.zip`でもよい）を、claude.aiのCustomize > Skillsでアップロード（`plan-review`はサポート外） |
 | GitHub CLI（gh 2.90以降） | `gh skill install ngram/skills <name> --agent claude-code --scope user` |
 | [APM](https://github.com/microsoft/apm) | `apm install -g ngram/skills/<name>` |
 | [skills CLI](https://github.com/vercel-labs/skills) | `npx skills add ngram/skills --skill <name>` |
@@ -28,7 +28,7 @@ claude.aiに入れたSkillは、Coworkとクラウドセッション、claude.ai
 | --- | --- | --- | --- |
 | [git-commit](git-commit/) | Git のステージング、日本語のコミットメッセージ案の作成、コミットの手順と書式。 | gitとNode.js 18以降が必要 | MIT |
 | [japanese-tech-writing](japanese-tech-writing/) | 日本語の技術文書・書籍原稿の文章規範。 | 空白の検査と修正（scripts/fix_spacing.mjs）にはNode.js 18以降が必要 | Unlicense AND MIT。取り込み元の部分はUnlicense（LICENSE.txt）、ngram/skillsで足した部分はMIT（LICENSE-MIT.txt） |
-| [plan-review](plan-review/) | plan/ 配下の Plan ファイルを Codex にレビューさせ、履歴を plan/.reviews/ に蓄積して diff を表示する。 | Claude Code向け（引数の置換とdisable-model-invocationを使う）。bashとcodex CLIが必要 | MIT |
+| [plan-review](plan-review/) | plan/ 配下の Plan ファイルを Codex にレビューさせ、履歴を plan/.reviews/ に蓄積して diff を表示する。 | Claude Code向け（引数の置換とdisable-model-invocationを使う）。手元のbashとcodex CLIが必要で、claude.aiはサポート外 | MIT |
 | [repo-privacy-audit](repo-privacy-audit/) | リポジトリと公開済みのパッケージに、個人情報・秘密情報・機微情報が含まれていないかを調べ、値を伏せて報告する。 | gitとNode.js 18以降が必要。公開済みのパッケージを調べるときは、各レジストリのコマンド（gem、npmなど）とネットワーク接続を使う | MIT |
 <!-- skills:list:end -->
 
@@ -53,6 +53,7 @@ claude.aiに入れたSkillは、Coworkとクラウドセッション、claude.ai
 - リリースは、Actionsの`release`ワークフローを「Run workflow」で版（`v0.1.0`など）を指定して実行して作る。CIと同じ検査を通したあと、`main`の最新のコミットにタグを付け、GitHub Releaseと、Skillごとの`.skill`（`<name>.skill`）とZIP（`<name>.zip`）をまとめて作る。`.skill`とZIPの中身は同じである。タグをpushできない環境（クラウドセッションなど）からも使える
 - 手元で`gh skill publish --tag v0.1.0`を実行して作ってもよい。このコマンドは`agent-skills`トピックも付ける。公開すると、`.github/workflows/release-assets.yml`が`.skill`とZIPを作ってリリースに添付する
 - 同じ`.skill`とZIPは`node scripts/package-skills.mjs`で手元でも作れる（`dist/`に出力する）。frontmatterにclaude.aiのアップロードで拒否されることがあるキー（skill-creatorの検証が許していないキー）があれば、警告を出す
+- claude.aiで使えないSkillは、frontmatterの`metadata`に`claude-ai: unsupported`を書く。そのSkillの`.skill`とZIPは作らず、READMEのclaude.aiの節もサポート外の案内になる
 - 不変リリース（immutable releases）を有効にしても、`release`ワークフローはそのまま使える。`gh skill publish`で作る場合は、公開したリリースに`.skill`とZIPを添付できないので、タグをpushして下書きのリリースを作り、`release-assets`をworkflow_dispatchで実行してから公開する
 
 ## ライセンス

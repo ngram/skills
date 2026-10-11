@@ -7,7 +7,8 @@
 // .skill は skill-creator の package_skill.py が作るのと同じ形式（中身は ZIP）で、<name>.zip と同じバイト列にする。
 // release.yml と release-assets.yml が、このスクリプトで作ったファイルをリリースに添付する。
 //
-// frontmatter に、skill-creator の検証（アップロードする .skill 向け）が許すキー以外があれば警告する。
+// frontmatter の metadata に claude-ai: unsupported がある Skill は、claude.ai のサポート外として作らない。
+// それ以外の Skill の frontmatter に、skill-creator の検証（アップロードする .skill 向け）が許すキー以外があれば警告する。
 // claude.ai へのアップロードで拒否されることがあるため。警告だけで、ファイルは作る。
 //
 // 使い方:
@@ -41,16 +42,21 @@ function findSkills(ref) {
     .sort();
 }
 
-// frontmatter の最上位のキーのうち、UPLOAD_KEYS に無いもの。
-function unsupportedKeys(ref, name) {
+// 指定した版の SKILL.md の frontmatter から、最上位のキーと metadata の claude-ai の値を読む。
+function readFrontmatter(ref, name) {
   const text = git(["show", `${ref}:${name}/SKILL.md`]).replace(/\r\n/g, "\n");
   const lines = text.split("\n");
   const end = lines[0] === "---" ? lines.indexOf("---", 1) : -1;
-  if (end === -1) return [];
-  return lines
-    .slice(1, end)
-    .map((l) => l.match(/^([A-Za-z0-9_-]+):/)?.[1])
-    .filter((k) => k && !UPLOAD_KEYS.has(k));
+  const body = end === -1 ? [] : lines.slice(1, end);
+  const keys = body.map((l) => l.match(/^([A-Za-z0-9_-]+):/)?.[1]).filter(Boolean);
+  let claudeAi;
+  let inMetadata = false;
+  for (const l of body) {
+    if (/^metadata:\s*$/.test(l)) inMetadata = true;
+    else if (/^\S/.test(l)) inMetadata = false;
+    else if (inMetadata) claudeAi = l.match(/^\s+claude-ai:\s*["']?([^"'\s]*)["']?\s*$/)?.[1] ?? claudeAi;
+  }
+  return { unsupportedKeys: keys.filter((k) => !UPLOAD_KEYS.has(k)), claudeAiUnsupported: claudeAi === "unsupported" };
 }
 
 function parseArgs(argv) {
@@ -82,12 +88,17 @@ function main(argv) {
     const out = resolve(opts.out);
     mkdirSync(out, { recursive: true });
     for (const name of skills) {
+      const fm = readFrontmatter(opts.ref, name);
+      if (fm.claudeAiUnsupported) {
+        console.log(`省略: ${name}（claude.ai のサポート外。frontmatter の metadata に claude-ai: unsupported がある）`);
+        continue;
+      }
       const zip = join(out, `${name}.zip`);
       const skill = join(out, `${name}.skill`);
       git(["archive", "--format=zip", `--output=${zip}`, opts.ref, `${name}/`]);
       copyFileSync(zip, skill);
       console.log(`作成: ${relative(process.cwd(), zip)}、${relative(process.cwd(), skill)}（${statSync(zip).size} バイト）`);
-      const keys = unsupportedKeys(opts.ref, name);
+      const keys = fm.unsupportedKeys;
       if (keys.length) {
         // GitHub Actions の中では、実行結果の画面に注釈として出す。
         const prefix = process.env.GITHUB_ACTIONS === "true" ? "::warning::" : "";
