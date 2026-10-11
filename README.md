@@ -27,14 +27,14 @@ claude.aiに入れたSkillは、Coworkとクラウドセッション、claude.ai
 | Skill | 説明 | 必要なもの | ライセンス |
 | --- | --- | --- | --- |
 | [git-commit](git-commit/) | Git のステージング、日本語のコミットメッセージ案の作成、コミットの手順と書式。 | gitとNode.js 18以降が必要 | MIT |
-| [japanese-tech-writing](japanese-tech-writing/) | 日本語の技術文書・書籍原稿の文章規範。 | なし | Unlicense（https://gist.github.com/k16shikano/67625f2a7d96e3bbdfae8d571a936063） |
+| [japanese-tech-writing](japanese-tech-writing/) | 日本語の技術文書・書籍原稿の文章規範。 | 空白の検査と修正（scripts/fix_spacing.mjs）にはNode.js 18以降が必要 | Unlicense（https://gist.github.com/k16shikano/67625f2a7d96e3bbdfae8d571a936063） |
 | [plan-review](plan-review/) | plan/ 配下の Plan ファイルを Codex にレビューさせ、履歴を plan/.reviews/ に蓄積して diff を表示する。 | Claude Code向け（引数の置換とdisable-model-invocationを使う）。bashとcodex CLIが必要 | MIT |
 | [repo-privacy-audit](repo-privacy-audit/) | リポジトリと公開済みのパッケージに、個人情報・秘密情報・機微情報が含まれていないかを調べ、値を伏せて報告する。 | gitとNode.js 18以降が必要。公開済みのパッケージを調べるときは、各レジストリのコマンド（gem、npmなど）とネットワーク接続を使う | MIT |
 <!-- skills:list:end -->
 
 `git-commit`は、`japanese-tech-writing`が入っていればその規範でコミットメッセージ案を点検する。
 
-`japanese-tech-writing`は、keiichiro shikano氏が[gist](https://gist.github.com/fd287c3133457c4fd8f5601d34aa817d)で公開しているSkillを、内容を変えずに収録したものである（Unlicense。「ライセンス」の節）。
+`japanese-tech-writing`は、keiichiro shikano氏が[gist](https://gist.github.com/fd287c3133457c4fd8f5601d34aa817d)で公開しているSkillに、日本語と英数字の間の空白を除く節とスクリプトを足して収録したものである（Unlicense。「ライセンス」の節）。取り込み元の部分は変えていない。
 
 ## 版の固定
 

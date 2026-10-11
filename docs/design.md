@@ -8,10 +8,10 @@ zipを展開した3つのSkillを、1つのGitHubリポジトリ（`ngram/skills
 | Skill | ファイル | 作者・ライセンス | 実行に必要なもの |
 |---|---|---|---|
 | `git-commit` | `SKILL.md`、`scripts/check_message.mjs`、`assets/gitmessage` | ngram・MIT | git、Node.js 18以降 |
-| `japanese-tech-writing` | `SKILL.md`、`LICENSE.txt` | keiichiro shikano・Unlicense | なし |
+| `japanese-tech-writing` | `SKILL.md`、`scripts/fix_spacing.mjs`、`LICENSE.txt` | keiichiro shikano・Unlicense（足した部分も同じ） | なし（スクリプトにはNode.js 18以降） |
 | `plan-review` | `SKILL.md` | ngram・MIT | bash、codex CLI |
 
-`japanese-tech-writing`は、gist（`fd287c3133457c4fd8f5601d34aa817d`）のコミット`8f2d576`と同じ内容である（改行だけLFにそろえた）。
+`japanese-tech-writing`は、gist（`fd287c3133457c4fd8f5601d34aa817d`）のコミット`8f2d576`の内容に、日本語と英数字の間の空白の節とスクリプトを足したものである（「各Skillに加えた変更」の節）。
 zipに入っていたこのgistのクローン（`.git`）は収録していない。
 
 ## ライセンス
@@ -55,7 +55,8 @@ claude.aiの個人のSkillは、画面からZIPをアップロードする方法
 │   ├── scripts/check_message.mjs
 │   └── assets/gitmessage
 ├── japanese-tech-writing/
-│   ├── SKILL.md                取り込み元のgistと同一に保つ
+│   ├── SKILL.md                取り込み元のgistの行は変えず、末尾に節を足す
+│   ├── scripts/fix_spacing.mjs 日本語と英数字の間の空白の検査と修正
 │   └── README.md               生成するブロックの後に、手書きの出典を置く
 ├── plan-review/
 │   ├── SKILL.md
@@ -63,6 +64,7 @@ claude.aiの個人のSkillは、画面からZIPをアップロードする方法
 ├── scripts/sync-skills.mjs     生成と検査のスクリプト
 ├── scripts/package-skills.mjs  claude.ai向けのSkillごとのZIPを作るスクリプト
 ├── tests/check_message.test.mjs
+├── tests/fix_spacing.test.mjs
 ├── tests/package-skills.test.mjs
 ├── .github/workflows/skills.yml
 ├── .github/workflows/release.yml  版を指定してタグ、リリース、ZIPを作る
@@ -121,7 +123,12 @@ claude.aiの個人のSkillは、画面からZIPをアップロードする方法
 
 ### japanese-tech-writing
 
-- `SKILL.md`は変えていない。出典は`japanese-tech-writing/README.md`の手書きの部分に書いた
+- 取り込み元の行は変えていない。出典は`japanese-tech-writing/README.md`の手書きの部分に書いた
+- 末尾への「日本語と英数字の間の空白」の節の追加。`git-commit`はtextlintの自動修正（`ja-space-between-half-and-full-width`、`ja-space-around-code`）と`check_message.mjs`で日本語と英数字の間の空白を除いていたが、このSkillには無かった。textlintの設定が無いプロジェクトでも働くように、空白を除くスクリプト`scripts/fix_spacing.mjs`を添えた
+  - `--fix`で除くのは、全角文字と英数字の間と、全角文字とインラインコードの間の空白。記号で始まる（または終わる）語の前後は、`check_message.mjs`と同じく場所を示すだけにした（取ると読みにくいときは括弧で示すため）
+  - frontmatter、コードブロック、インラインコードの中、URLの前後、行頭の書式の記号の後ろ、表の区切りと強調の記号とHTMLのコメントの区切りの隣は変えない。空白を除くとMarkdownの解釈やURLの範囲が変わるため
+  - 全角文字の判定表は`check_message.mjs`の写しを持つ。Skillは1つずつ入れられるので、隣のSkillのファイルは参照できない
+- frontmatterへの`compatibility`の追加（スクリプトにNode.js 18以降が要る）
 
 ## frontmatterの扱い
 
@@ -148,7 +155,7 @@ claude.aiの個人のSkillは、画面からZIPをアップロードする方法
 pushとプルリクエストで`.github/workflows/skills.yml`が次を実行する。
 
 - `node scripts/sync-skills.mjs --check`
-- `node --test tests/*.test.mjs`（`check_message.mjs`、`scan.mjs`、`package-skills.mjs`の動作確認）
+- `node --test tests/*.test.mjs`（`check_message.mjs`、`fix_spacing.mjs`、`scan.mjs`、`package-skills.mjs`の動作確認）
 - `claude plugin validate .`
 - `gh skill publish --dry-run`
 

@@ -8,5 +8,5 @@ Skillを個別にインストールできるように配布するリポジトリ
 - Skillのディレクトリに`bin/`、`hooks/`、`agents/`、`commands/`を作らない。Claude Codeのプラグインの部品として読み込まれる
 - テストはSkillのディレクトリではなく`tests/`に置く。Skillのディレクトリの中身は、すべて利用者の環境にコピーされる
 - `gh skill install`で入れたコピー（frontmatterに`metadata.github-*`がある）を戻さない。`gh skill publish`がエラーにする
-- `japanese-tech-writing/SKILL.md`は取り込み元のgistと同じ内容に保ち、変更は取り込み元に提案する
+- `japanese-tech-writing/SKILL.md`は、取り込み元のgistの内容に、このリポジトリで足した部分（frontmatterの`compatibility`の行と、末尾のHTMLのコメントより下の節）を加えたもの。取り込み元の行は変えず、変更は取り込み元に提案する。取り込み元を取り込み直すときは、足した部分を残す。足した部分の検査と修正のスクリプトは`japanese-tech-writing/scripts/fix_spacing.mjs`
 - ライセンスはfrontmatterの`license`に書く。MIT以外にするSkillは、ライセンスの本文を`LICENSE.txt`としてSkillのディレクトリに置く。明示していないSkillは、ルートの`LICENSE`（MIT）とする
