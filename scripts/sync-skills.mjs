@@ -152,19 +152,24 @@ function claudeAiSection(s) {
   if (s.claudeAiUnsupported) {
     return [
       ...head,
-      "このSkillはclaude.aiのサポート外で、リリースに`.skill`とZIPを添付しない。手元のClaude Codeには、ほかの経路で入れる。",
+      "このSkillはclaude.aiのサポート外で、リリースに`.skill`を添付しない。手元のClaude Codeには、ほかの経路で入れる。",
       "",
     ];
   }
   return [
     ...head,
-    `[最新のリリース](https://github.com/${REPO}/releases/latest)に添付した\`${s.name}.skill\`をダウンロードし、claude.aiのCustomize > Skillsで「+」→「Create skill」→「Upload a skill」の順に進んでアップロードする。同じ中身の\`${s.name}.zip\`も添付してあり、どちらをアップロードしてもよい。最新版は次のURLでも取得できる。`,
+    `[最新のリリース](https://github.com/${REPO}/releases/latest)に添付した\`${s.name}.skill\`を、claude.aiに入れる。最新版は次のURLで取得できる。`,
     "",
     "```text",
     `https://github.com/${REPO}/releases/latest/download/${s.name}.skill`,
     "```",
     "",
-    "claude.aiに入れたSkillは、Coworkとクラウドセッション、claude.aiにログインした手元のClaude Codeにも同期される。更新するときは、新しい版の`.skill`をアップロードし直す。",
+    "入れ方は次の2つ。",
+    "",
+    "- Claudeのセッションで、Claudeにこの`.skill`をファイルとして渡してもらい、ファイルのカードの「Save skill」を押す",
+    "- claude.aiのCustomize > Skillsで「+」→「Create skill」→「Upload a skill」の順に進んでアップロードする。`.skill`を選べないときは、拡張子を`.zip`に変える（中身はZIP）",
+    "",
+    "claude.aiに入れたSkillは、Coworkとクラウドセッション、claude.aiにログインした手元のClaude Codeにも同期される。更新するときは、新しい版の`.skill`を同じ方法で入れ直す。",
     "",
   ];
 }

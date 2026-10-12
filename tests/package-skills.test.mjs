@@ -46,25 +46,23 @@ function frontmatterAtHead(name) {
 
 const skillsAtHead = () => gitFiles("HEAD").map((p) => p.match(/^([^./][^/]*)\/SKILL\.md$/)?.[1]).filter(Boolean);
 
-test("Skill ごとに、ルートに Skill のディレクトリが1つ入った ZIP と同じ中身の .skill を作り、claude.ai のサポート外の Skill は作らない", () => {
+test("Skill ごとに、ルートに Skill のディレクトリが1つ入った .skill を作り、ZIP は作らず、claude.ai のサポート外の Skill は作らない", () => {
   const out = mkdtempSync(join(tmpdir(), "package-skills-"));
   const r = run("--out", out);
   assert.equal(r.status, 0, r.stderr);
   const skills = skillsAtHead();
   assert.ok(skills.length > 0);
   for (const name of skills) {
-    const file = join(out, `${name}.zip`);
     const skill = join(out, `${name}.skill`);
+    assert.ok(!existsSync(join(out, `${name}.zip`)), `${name}.zip が作られた`);
     if (frontmatterAtHead(name).claudeAiUnsupported) {
-      assert.ok(!existsSync(file) && !existsSync(skill), `${name} は claude.ai のサポート外なのに作られた`);
+      assert.ok(!existsSync(skill), `${name} は claude.ai のサポート外なのに作られた`);
       assert.ok(r.stdout.includes(`省略: ${name}`), `${name} を省いたことが出力に無い`);
       continue;
     }
-    assert.ok(existsSync(file), `${name}.zip が無い`);
-    const files = zipEntries(file).filter((p) => !p.endsWith("/"));
-    assert.deepEqual(files.sort(), gitFiles("HEAD", `${name}/`).sort(), `${name}.zip の中身が git の管理するファイルと違う`);
     assert.ok(existsSync(skill), `${name}.skill が無い`);
-    assert.ok(readFileSync(skill).equals(readFileSync(file)), `${name}.skill の中身が ${name}.zip と違う`);
+    const files = zipEntries(skill).filter((p) => !p.endsWith("/"));
+    assert.deepEqual(files.sort(), gitFiles("HEAD", `${name}/`).sort(), `${name}.skill の中身が git の管理するファイルと違う`);
   }
 });
 

@@ -1,5 +1,5 @@
-# リリースを公開したときに、Skill ごとの ZIP（<name>.zip）と .skill（<name>.skill）を作ってリリースに添付する。
-# どちらも claude.ai の Customize > Skills にそのままアップロードできる形（中身は同じ）で、scripts/package-skills.mjs が作る。
+# リリースを公開したときに、Skill ごとの .skill（<name>.skill）を作ってリリースに添付する。
+# .skill は claude.ai に入れる形式（中身は ZIP）で、scripts/package-skills.mjs が作る。
 # 手元の gh skill publish などで作ったリリースのためのもの。release.yml で作ったリリースには、release.yml が添付する。
 #
 # 作るためのスクリプトは既定のブランチの最新のものを使い、中身はタグの版から取る。古いタグのリリースにも、
@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: ZIPと.skillを添付するリリースのタグ（例：v0.1.0）
+        description: .skillを添付するリリースのタグ（例：v0.1.0）
         required: true
         type: string
 
@@ -36,9 +36,9 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 22
-      - name: Build a ZIP and a .skill per skill
+      - name: Build a .skill per skill
         run: node scripts/package-skills.mjs --ref "refs/tags/$TAG" --out dist
-      - name: Attach the ZIPs and the .skill files to the release
+      - name: Attach the .skill files to the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$TAG" dist/*.zip dist/*.skill --clobber --repo "$GITHUB_REPOSITORY"
+        run: gh release upload "$TAG" dist/*.skill --clobber --repo "$GITHUB_REPOSITORY"

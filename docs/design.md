@@ -31,7 +31,7 @@ zipに入っていたこのgistのクローン（`.git`）は収録していな�
 | 経路 | 利用者の操作 | リポジトリ側に要るもの |
 |---|---|---|
 | Claude Code・Claude Desktop（プラグイン） | `/plugin marketplace add ngram/skills`のあと`/plugin install <name>@ngram-skills` | `.claude-plugin/marketplace.json` |
-| claude.ai（Cowork・クラウドセッション） | リリースに添付した`<name>.skill`（中身が同じ`<name>.zip`でもよい）を、claude.aiのCustomize > Skillsでアップロード（`plan-review`はサポート外） | リリースへの`.skill`とZIPの添付（`release.yml`、`release-assets.yml`） |
+| claude.ai（Cowork・クラウドセッション） | リリースに添付した`<name>.skill`を、セッションのファイルのカードの「Save skill」か、claude.aiのCustomize > Skillsのアップロードで入れる（`plan-review`はサポート外） | リリースへの`.skill`の添付（`release.yml`、`release-assets.yml`） |
 | GitHub CLI（gh 2.90以降） | `gh skill install ngram/skills <name> --agent claude-code --scope user` | `<name>/SKILL.md`。検索には`agent-skills`トピック、版の固定にはGitHub Release |
 | APM（Microsoft Agent Package Manager） | `apm install -g ngram/skills/<name>` | `<name>/SKILL.md` |
 | skills CLI（`npx skills`） | `npx skills add ngram/skills --skill <name>` | `<name>/SKILL.md` |
@@ -42,9 +42,14 @@ zipに入っていたこのgistのクローン（`.git`）は収録していな�
 APMはサブディレクトリのパス（`ngram/skills/<name>`）を指定すると、直下に`SKILL.md`がある1つのSkillとして入れる。
 このため、最初の設計で置く予定だったリポジトリ直下の`apm.yml`は不要になった。
 
-claude.aiの個人のSkillは、画面からZIPをアップロードする方法しか無い。APIでアップロードしたSkill（`/v1/skills`）はclaude.aiでは使えず、クラウドセッションはリポジトリの`.claude/settings.json`で指定したプラグインも読まない。
-そこで、アップロードするファイルをリリースに添付して、利用者の手作業をダウンロードとアップロードだけにした。
-ファイルは、skill-creatorの`package_skill.py`が作るのと同じ`.skill`（中身はSkillのディレクトリをルートに置いたZIP）と、同じ中身のZIPの2つを添付する。
+claude.aiの個人のSkillを入れる方法は、セッションに送られた`.skill`のファイルのカードの「Save skill」と、画面からのアップロードの2つである。APIでアップロードしたSkill（`/v1/skills`）はclaude.aiでは使えず、クラウドセッションはリポジトリの`.claude/settings.json`で指定したプラグインも読まない。
+そこで、skill-creatorの`package_skill.py`が作るのと同じ`.skill`（中身はSkillのディレクトリをルートに置いたZIP）をリリースに添付する。届け方は「claude.aiへの反映」の節にある。
+
+ZIPは添付しない。理由は次のとおり。
+
+- 「Save skill」のボタンで入れる流れは`.skill`を使う。skill-creatorの説明に「The presented `.skill` (or bare `SKILL.md`) file card shows a **Save skill** button」とある
+- 画面からのアップロードは、公式のヘルプ（[Use skills in Claude](https://support.claude.com/en/articles/12512180-use-skills-in-claude)）ではZIPと書かれていて、`.skill`には触れていない。ただし`.skill`の中身はZIPそのものなので、画面で`.skill`を選べなくても、拡張子を`.zip`に変えれば同じものになる
+- v0.1.0とv0.1.1のリリースに添付したZIPは、そのまま残す
 
 ## リポジトリの構成
 
@@ -65,13 +70,15 @@ claude.aiの個人のSkillは、画面からZIPをアップロードする方法
 │   ├── SKILL.md
 │   └── README.md
 ├── scripts/sync-skills.mjs     生成と検査のスクリプト
-├── scripts/package-skills.mjs  claude.ai向けのSkillごとの.skillとZIPを作るスクリプト
+├── scripts/package-skills.mjs  claude.ai向けのSkillごとの.skillを作るスクリプト
+├── scripts/check-skill-updates.mjs  claude.aiに入っているSkillと最新のリリースの.skillを比べるスクリプト
 ├── tests/check_message.test.mjs
 ├── tests/fix_spacing.test.mjs
 ├── tests/package-skills.test.mjs
+├── tests/check-skill-updates.test.mjs
 ├── .github/workflows/skills.yml
-├── .github/workflows/release.yml  版を指定してタグ、リリース、.skill、ZIPを作る
-├── .github/workflows/release-assets.yml  公開したリリースにSkillごとの.skillとZIPを添付する
+├── .github/workflows/release.yml  版を指定してタグ、リリース、.skillを作る
+├── .github/workflows/release-assets.yml  公開したリリースにSkillごとの.skillを添付する
 ├── .gitattributes              * text=auto eol=lf
 ├── .gitignore
 ├── CLAUDE.md                   保守の決まり
@@ -145,25 +152,50 @@ claude.aiの個人のSkillは、画面からZIPをアップロードする方法
 ## 版とリリース
 
 - 版はリポジトリ全体で1つのsemverのタグにする（`v0.1.0`から）
-- リリースは、`.github/workflows/release.yml`をworkflow_dispatchで版を指定して実行して作る。版の形（`v0.1.0`）、実行したブランチが`main`であること、同じタグが無いことを確かめ、CIと同じ検査（`claude plugin validate .`と`gh skill publish --dry-run`を含む）を通してから、`gh release create`でタグ、GitHub Release、Skillごとの`.skill`とZIPを作る
+- リリースは、`.github/workflows/release.yml`をworkflow_dispatchで版を指定して実行して作る。版の形（`v0.1.0`）、実行したブランチが`main`であること、同じタグが無いことを確かめ、CIと同じ検査（`claude plugin validate .`と`gh skill publish --dry-run`を含む）を通してから、`gh release create`でタグ、GitHub Release、Skillごとの`.skill`を作る
   - タグをpushできない環境（クラウドセッションなど）からもリリースを作れるように、タグの作成をGitHub Actionsの中で行う
   - `gh release create`はファイルを下書きのリリースに添付してから公開するので、不変リリース（immutable releases）を有効にしても動く
-  - GITHUB_TOKENで作ったリリースは他のワークフローを起動しないので、`release-assets.yml`は動かない。`.skill`とZIPは`release.yml`が添付する
+  - GITHUB_TOKENで作ったリリースは他のワークフローを起動しないので、`release-assets.yml`は動かない。`.skill`は`release.yml`が添付する
   - `gh skill publish`と違い、`agent-skills`トピックは付けず、不変リリースの有効化も提案しない。どちらもリポジトリの設定から一度だけ行う
 - 手元の`gh skill publish --tag v0.1.0`でも作れる。このコマンドが検証、`agent-skills`トピックの追加、GitHub Releaseの作成を行い、不変リリースの有効化も提案する
 - 利用者は、gh skillでは`<name>@v0.1.0`、APMでは`ngram/skills/<name>#v0.1.0`、Claude Codeでは`/plugin marketplace add ngram/skills@v0.1.0`で版を固定できる。claude.aiでは、そのタグのリリースに添付した`<name>.skill`をアップロードする
-- ZIPは`scripts/package-skills.mjs`が`git archive`で作るので、gitが管理しているファイルだけが入り、ルートにSkillのディレクトリが1つ置かれる（claude.aiはこの形を求める）。`.skill`はそのZIPの写しで、バイト列も同じである。ファイル名を`<name>.skill`と`<name>.zip`に固定したので、`https://github.com/ngram/skills/releases/latest/download/<name>.skill`が常に最新版を指す
-- frontmatterの`metadata`に`claude-ai: unsupported`があるSkillは、claude.aiのサポート外として`.skill`とZIPを作らない。`sync-skills.mjs`も同じ印を見て、そのSkillのREADMEのclaude.aiの節をサポート外の案内にする。印をSkillのfrontmatterに置くのは、二つのスクリプトが同じところから判断でき、Skillを移しても印が一緒に移るためである。`metadata`はAgent Skillsの仕様が独自の情報のために用意した項目なので、ほかのツールの検証にもかからない
+- `.skill`は`scripts/package-skills.mjs`が`git archive`（ZIPの形式）で作るので、gitが管理しているファイルだけが入り、ルートにSkillのディレクトリが1つ置かれる（claude.aiはこの形を求める）。ファイル名を`<name>.skill`に固定したので、`https://github.com/ngram/skills/releases/latest/download/<name>.skill`が常に最新版を指す
+- frontmatterの`metadata`に`claude-ai: unsupported`があるSkillは、claude.aiのサポート外として`.skill`を作らない。`sync-skills.mjs`も同じ印を見て、そのSkillのREADMEのclaude.aiの節をサポート外の案内にする。印をSkillのfrontmatterに置くのは、二つのスクリプトが同じところから判断でき、Skillを移しても印が一緒に移るためである。`metadata`はAgent Skillsの仕様が独自の情報のために用意した項目なので、ほかのツールの検証にもかからない
 - `package-skills.mjs`は、claude.aiのサポート外ではないSkillのfrontmatterに、skill-creatorの検証（`quick_validate.py`）が許していないキーがあると警告する。許すのは`name`、`description`、`license`、`allowed-tools`、`metadata`、`compatibility`の6つで、ほかのキーがあるとclaude.aiへのアップロードで拒否されることがある。GitHub Actionsの中では、警告を実行結果の注釈として出す
   - `plan-review`は、Claude Code向けの`argument-hint`と`disable-model-invocation`を持つが、claude.aiのサポート外として作らないので警告も出ない
-- `gh skill publish`などでリリースを公開すると、`.github/workflows/release-assets.yml`がタグの内容から`.skill`とZIPを作って添付する。作るためのスクリプトは既定のブランチの最新のものを使うので、古いタグのリリースにも、workflow_dispatchでタグを指定して実行すれば今の形式のファイルを後から添付できる。不変リリースを有効にしていると公開後には添付できないので、その場合はタグをpushして下書きのリリースを作り、`release-assets`をworkflow_dispatchでタグを指定して実行してから公開する
+- `gh skill publish`などでリリースを公開すると、`.github/workflows/release-assets.yml`がタグの内容から`.skill`を作って添付する。作るためのスクリプトは既定のブランチの最新のものを使うので、古いタグのリリースにも、workflow_dispatchでタグを指定して実行すれば今の形式のファイルを後から添付できる。不変リリースを有効にしていると公開後には添付できないので、その場合はタグをpushして下書きのリリースを作り、`release-assets`をworkflow_dispatchでタグを指定して実行してから公開する
+
+## claude.aiへの反映
+
+GitHubのリリースをclaude.aiに知らせる仕組みも、自動で入れ直す仕組みも無い。そこで、Claude Codeのクラウドセッションで最新のリリースと見比べ、入れ直しが要る`.skill`だけをセッションに送る。利用者の操作は、届いたファイルのカードの「Save skill」を押すことだけになる。
+
+1. リリースを作る（`release`ワークフロー）
+2. クラウドセッションで`node scripts/check-skill-updates.mjs`を実行する
+   - 最新の版（`v`で始まるタグのうち最新のもの）のリリースから`<name>.skill`をダウンロードする（`.skill`の無い古い版では`<name>.zip`を使う）
+   - claude.aiの写し（`~/.claude/skills/synced/<id>/<name>/`）と中身を比べ、Skillごとに「同じ」「更新あり」「未導入」「省略」（claude.aiのサポート外）「確かめられない」のどれかを出す
+   - claude.aiは取り込むときに`name`を引用符で囲むことがあるので、frontmatterの値の引用符の有無は比べない。`README.md`は利用者向けの説明でClaudeの動作には使わないので比べない
+   - 「更新あり」と「未導入」のSkillの`.skill`だけを`dist/skill-updates/`に置く
+3. Claudeが置かれた`.skill`をセッションに送る（`SendUserFile`）。ファイルのカードに「Save skill」のボタンが出る
+4. ボタンを押すとclaude.aiのSkillが入れ替わり、Claude Codeのセッションにはセッションの開始時と、その後およそ10分ごとに同期される（公式のヘルプによる）
+
+この手順をリリースのたびに自動で行うには、Routineを使う。RoutineはGitHubの「Release」のイベント（公開など）をきっかけに動ける。その場合は、イベントごとに新しいクラウドセッションが作られる。既存のセッションには書き込めない。GitHubのイベントをきっかけにするRoutineは、claude.ai/code/routinesの画面などから作る（クラウドセッションの中からは作れない）。Routineに設定するプロンプトの案は次のとおり。
+
+```text
+ngram/skillsの最新のリリースの.skillのうち、claude.aiに入れ直しが要るものを、このセッションに届ける。
+
+1. ngram/skillsのリポジトリのルートで作業する。cloneされていなければ、git clone https://github.com/ngram/skills で取ってくる
+2. node scripts/check-skill-updates.mjs --json --out /tmp/skill-updates を実行する。claude.aiのSkillの同期がまだ終わっていないと、すべてが未導入（missing）になる。そのときは1分待ってからやり直す
+3. 結果のうち、statusがupdateかmissingのSkillについて、fileに置かれた.skillをSendUserFileで1つずつ送る（statusはproactive）。キャプションには、版、Skill名、更新か未導入か、違うファイル（differs）を書く
+4. 最後に、リリースのURL（releaseUrl）と、送ったSkill、同じだったSkill、省略したSkillを短く報告する。送るものが無ければ、その旨を1行で報告する
+5. ファイルの変更、コミット、push、リリースの変更はしない
+```
 
 ## CI
 
 pushとプルリクエストで`.github/workflows/skills.yml`が次を実行する。
 
 - `node scripts/sync-skills.mjs --check`
-- `node --test tests/*.test.mjs`（`check_message.mjs`、`fix_spacing.mjs`、`scan.mjs`、`package-skills.mjs`の動作確認）
+- `node --test tests/*.test.mjs`（`check_message.mjs`、`fix_spacing.mjs`、`scan.mjs`、`package-skills.mjs`、`check-skill-updates.mjs`の動作確認）
 - `claude plugin validate .`
 - `gh skill publish --dry-run`
 
