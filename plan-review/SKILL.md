@@ -120,10 +120,32 @@ VERDICT: REVISE
 EOF
 } > "$PROMPT_FILE"
 
-codex exec -s read-only - < "$PROMPT_FILE" > "$CODEX_OUT" 2>&1
+# モデルと推論の強さは、環境変数で指定されたときだけ渡す。無ければ Codex CLI の既定値を使う。
+# 空の値を -m "" のように渡さないよう、引数を配列に積む。
+CODEX_ARGS=(exec -s read-only)
+if [ -n "${PLAN_REVIEW_MODEL:-}" ]; then
+  CODEX_ARGS+=(-m "$PLAN_REVIEW_MODEL")
+fi
+if [ -n "${PLAN_REVIEW_EFFORT:-}" ]; then
+  CODEX_ARGS+=(-c "model_reasoning_effort=$PLAN_REVIEW_EFFORT")
+fi
+
+codex "${CODEX_ARGS[@]}" - < "$PROMPT_FILE" > "$CODEX_OUT" 2>&1
+CODEX_STATUS=$?
 
 echo "=== Codex レビュー結果 (r${ROUND}) ==="
 cat "$CODEX_OUT"
+
+# 使ったモデルと推論の強さは、codex が標準エラー出力に書く見出しから取り出す。
+echo "=== 使用したモデル ==="
+grep -m 2 -E '^(model|reasoning effort): ' "$CODEX_OUT" || echo "（見出しにモデルの行がありません）"
+
+# 失敗したときは、環境変数が原因かどうかを見分けられるように値を示す。
+if [ "$CODEX_STATUS" -ne 0 ]; then
+  echo "=== codex が終了コード ${CODEX_STATUS} で終わりました ==="
+  echo "PLAN_REVIEW_MODEL : ${PLAN_REVIEW_MODEL:-（未設定）}"
+  echo "PLAN_REVIEW_EFFORT: ${PLAN_REVIEW_EFFORT:-（未設定）}"
+fi
 
 # IDE にレビュー結果を自動表示する（VSCode の code CLI があれば editor で開く）。
 # Plan 作成時に md が自動で開くのと同じ体験。code が無い環境（headless/cron 等）は黙ってスキップ。
@@ -165,6 +187,7 @@ echo "Planファイル    : $PLAN_FILE"
 echo "スナップショット: $BEFORE"
 echo "Codex結果       : $CODEX_OUT"
 echo "履歴ディレクトリ: $REVIEW_DIR"
+grep -m 2 -E '^(model|reasoning effort): ' "$CODEX_OUT" | sed 's/^/Codex /'
 
 # 最終レビュー結果と、最初の Plan ↔ 最終 Plan の差分を VSCode に自動表示する。
 # （code CLI がある場合のみ。最初のスナップショットは r01_before.md）
@@ -189,6 +212,32 @@ fi
 /plan-review 20250621_my-feature
 /plan-review plan/20250621_my-feature.md
 ```
+
+## Codexのモデルと推論の強さ
+
+既定では、モデルも推論の強さも指定せずに`codex exec`を実行する。どちらもCodex CLIの既定値になるので、CLIを更新すると変わることがある。実際に使った値は、レビューのたびに「使用したモデル」として表示され、`rNN_codex.md`の見出し（`model:`と`reasoning effort:`の行）にも残る。
+
+レビューに使う値を決めたいときは、次の環境変数を設定する。空の値は、設定しないのと同じに扱う。
+
+| 環境変数 | Codexへの渡し方 | 設定しないとき |
+|---|---|---|
+| `PLAN_REVIEW_MODEL` | `-m <値>` | CLIの既定のモデル |
+| `PLAN_REVIEW_EFFORT` | `-c model_reasoning_effort=<値>` | CLIの既定の推論の強さ |
+
+`-c`で渡すので、`~/.codex/config.toml`の`model_reasoning_effort`より優先される。`plan-review`以外のCodexの使い方には影響しない。
+
+常に同じ値を使うときは、Claude Codeの`settings.json`の`env`に書く。
+
+```json
+{
+  "env": {
+    "PLAN_REVIEW_MODEL": "gpt-6.1-sol",
+    "PLAN_REVIEW_EFFORT": "high"
+  }
+}
+```
+
+使えるモデルと推論の強さは、Codex CLIの版とアカウントによって変わる。使えない値を設定すると`codex`が0以外で終わり、エラーの文面が`rNN_codex.md`に残る。このとき、設定されている環境変数の値もあわせて表示される。
 
 ## .gitignore 推奨設定
 
