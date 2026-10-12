@@ -29,6 +29,7 @@ claude.aiに入れたSkillは、Coworkとクラウドセッション、claude.ai
 | [git-commit](git-commit/) | Git のステージング、日本語のコミットメッセージ案の作成、コミットの手順と書式。 | gitとNode.js 18以降が必要 | MIT |
 | [japanese-tech-writing](japanese-tech-writing/) | 日本語の技術文書・書籍原稿の文章規範。 | 空白の検査と修正（scripts/fix_spacing.mjs）にはNode.js 18以降が必要 | Unlicense AND MIT。取り込み元の部分はUnlicense（LICENSE.txt）、ngram/skillsで足した部分はMIT（LICENSE-MIT.txt） |
 | [plan-review](plan-review/) | plan/ 配下の Plan ファイルを Codex にレビューさせ、履歴を plan/.reviews/ に蓄積して diff を表示する。 | Claude Code向け（引数の置換とdisable-model-invocationを使う）。手元のbashとcodex CLIが必要で、claude.aiはサポート外 | MIT |
+| [readme-writing](readme-writing/) | READMEを、初めての人が使い始めるための入口として短く書く。 | 計測のスクリプト（scripts/readme_stats.mjs）にはNode.js 18以降が必要 | MIT |
 | [repo-privacy-audit](repo-privacy-audit/) | リポジトリと公開済みのパッケージに、個人情報・秘密情報・機微情報が含まれていないかを調べ、値を伏せて報告する。 | gitとNode.js 18以降が必要。公開済みのパッケージを調べるときは、各レジストリのコマンド（gem、npmなど）とネットワーク接続を使う | MIT |
 <!-- skills:list:end -->
 
