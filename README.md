@@ -10,7 +10,7 @@
 | 経路 | コマンド |
 | --- | --- |
 | Claude Code・Claude Desktop（プラグイン） | `/plugin marketplace add ngram/skills`のあと`/plugin install <name>@ngram-skills` |
-| claude.ai（Cowork・クラウドセッション） | [リリース](https://github.com/ngram/skills/releases/latest)に添付した`<name>.skill`（中身が同じ`<name>.zip`でもよい）を、claude.aiのCustomize > Skillsでアップロード（`plan-review`はサポート外） |
+| claude.ai（Cowork・クラウドセッション） | [リリース](https://github.com/ngram/skills/releases/latest)に添付した`<name>.skill`を、セッションのファイルのカードの「Save skill」か、claude.aiのCustomize > Skillsのアップロードで入れる（`plan-review`はサポート外） |
 | GitHub CLI（gh 2.90以降） | `gh skill install ngram/skills <name> --agent claude-code --scope user` |
 | [APM](https://github.com/microsoft/apm) | `apm install -g ngram/skills/<name>` |
 | [skills CLI](https://github.com/vercel-labs/skills) | `npx skills add ngram/skills --skill <name>` |
@@ -50,11 +50,12 @@ claude.aiに入れたSkillは、Coworkとクラウドセッション、claude.ai
 - Skillは直下の`<name>/SKILL.md`に置き、ディレクトリ名とfrontmatterの`name`を一致させる
 - Skillを足したり、frontmatterを変えたりしたら、`node scripts/sync-skills.mjs`を実行する。各SkillのREADMEのインストール手順、`.claude-plugin/marketplace.json`、上のSkill一覧が生成される
 - `node scripts/sync-skills.mjs --check`と`node --test tests/*.test.mjs`はCIでも実行する。CIでは`claude plugin validate .`と`gh skill publish --dry-run`もかける
-- リリースは、Actionsの`release`ワークフローを「Run workflow」で版（`v0.1.0`など）を指定して実行して作る。CIと同じ検査を通したあと、`main`の最新のコミットにタグを付け、GitHub Releaseと、Skillごとの`.skill`（`<name>.skill`）とZIP（`<name>.zip`）をまとめて作る。`.skill`とZIPの中身は同じである。タグをpushできない環境（クラウドセッションなど）からも使える
-- 手元で`gh skill publish --tag v0.1.0`を実行して作ってもよい。このコマンドは`agent-skills`トピックも付ける。公開すると、`.github/workflows/release-assets.yml`が`.skill`とZIPを作ってリリースに添付する
-- 同じ`.skill`とZIPは`node scripts/package-skills.mjs`で手元でも作れる（`dist/`に出力する）。frontmatterにclaude.aiのアップロードで拒否されることがあるキー（skill-creatorの検証が許していないキー）があれば、警告を出す
-- claude.aiで使えないSkillは、frontmatterの`metadata`に`claude-ai: unsupported`を書く。そのSkillの`.skill`とZIPは作らず、READMEのclaude.aiの節もサポート外の案内になる
-- 不変リリース（immutable releases）を有効にしても、`release`ワークフローはそのまま使える。`gh skill publish`で作る場合は、公開したリリースに`.skill`とZIPを添付できないので、タグをpushして下書きのリリースを作り、`release-assets`をworkflow_dispatchで実行してから公開する
+- リリースは、Actionsの`release`ワークフローを「Run workflow」で版（`v0.1.0`など）を指定して実行して作る。CIと同じ検査を通したあと、`main`の最新のコミットにタグを付け、GitHub Releaseと、Skillごとの`.skill`（`<name>.skill`）をまとめて作る。タグをpushできない環境（クラウドセッションなど）からも使える
+- 手元で`gh skill publish --tag v0.1.0`を実行して作ってもよい。このコマンドは`agent-skills`トピックも付ける。公開すると、`.github/workflows/release-assets.yml`が`.skill`を作ってリリースに添付する
+- 同じ`.skill`は`node scripts/package-skills.mjs`で手元でも作れる（`dist/`に出力する）。frontmatterにclaude.aiのアップロードで拒否されることがあるキー（skill-creatorの検証が許していないキー）があれば、警告を出す
+- claude.aiで使えないSkillは、frontmatterの`metadata`に`claude-ai: unsupported`を書く。そのSkillの`.skill`は作らず、READMEのclaude.aiの節もサポート外の案内になる
+- リリースのあと、Claude Codeのクラウドセッションで`node scripts/check-skill-updates.mjs`を実行すると、claude.aiに入っているSkillと最新のリリースの`.skill`を比べ、入れ直しが要る`.skill`を`dist/skill-updates/`に置く。Claudeがこのファイルをセッションに送ると、ファイルのカードの「Save skill」で入れられる。リリースのたびにこれを行うRoutineの設定は、[設計書](docs/design.md)の「claude.aiへの反映」の節にある
+- 不変リリース（immutable releases）を有効にしても、`release`ワークフローはそのまま使える。`gh skill publish`で作る場合は、公開したリリースに`.skill`を添付できないので、タグをpushして下書きのリリースを作り、`release-assets`をworkflow_dispatchで実行してから公開する
 
 ## ライセンス
 

@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-// Skill ごとに、claude.ai の Customize > Skills にアップロードできる ZIP（<name>.zip）と .skill（<name>.skill）を作る。
+// Skill ごとに、claude.ai に入れる .skill（<name>.skill）を作る。
 // 依存パッケージは無く、Node.js 18 以降の標準機能と git だけで動く。
 //
-// ZIP には、指定した版で git が管理しているファイルだけを入れ、ルートに Skill のディレクトリを1つ置く
-// （claude.ai は、ZIP のルートのディレクトリ名と frontmatter の name が一致することを求める）。
-// .skill は skill-creator の package_skill.py が作るのと同じ形式（中身は ZIP）で、<name>.zip と同じバイト列にする。
+// .skill は skill-creator の package_skill.py が作るのと同じ形式で、中身は ZIP である。指定した版で git が管理している
+// ファイルだけを入れ、ルートに Skill のディレクトリを1つ置く（claude.ai は、ルートのディレクトリ名と frontmatter の
+// name が一致することを求める）。セッションに送るとファイルのカードに「Save skill」のボタンが出て、押すと入る。
+// claude.ai の画面からアップロードするときに .skill を選べなければ、拡張子を .zip に変えればよい。
 // release.yml と release-assets.yml が、このスクリプトで作ったファイルをリリースに添付する。
 //
 // frontmatter の metadata に claude-ai: unsupported がある Skill は、claude.ai のサポート外として作らない。
@@ -13,11 +14,11 @@
 //
 // 使い方:
 //   node scripts/package-skills.mjs [--ref <コミットやタグ>] [--out <ディレクトリ>]
-//     --ref  ZIP にする版（既定は HEAD）
-//     --out  ZIP と .skill を書き出すディレクトリ（既定は dist）
+//     --ref  .skill にする版（既定は HEAD）
+//     --out  .skill を書き出すディレクトリ（既定は dist）
 
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, statSync } from "node:fs";
+import { mkdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -93,11 +94,9 @@ function main(argv) {
         console.log(`省略: ${name}（claude.ai のサポート外。frontmatter の metadata に claude-ai: unsupported がある）`);
         continue;
       }
-      const zip = join(out, `${name}.zip`);
       const skill = join(out, `${name}.skill`);
-      git(["archive", "--format=zip", `--output=${zip}`, opts.ref, `${name}/`]);
-      copyFileSync(zip, skill);
-      console.log(`作成: ${relative(process.cwd(), zip)}、${relative(process.cwd(), skill)}（${statSync(zip).size} バイト）`);
+      git(["archive", "--format=zip", `--output=${skill}`, opts.ref, `${name}/`]);
+      console.log(`作成: ${relative(process.cwd(), skill)}（${statSync(skill).size} バイト）`);
       const keys = fm.unsupportedKeys;
       if (keys.length) {
         // GitHub Actions の中では、実行結果の画面に注釈として出す。

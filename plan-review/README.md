@@ -18,7 +18,7 @@
 
 ### claude.ai（Cowork・クラウドセッション）
 
-このSkillはclaude.aiのサポート外で、リリースに`.skill`とZIPを添付しない。手元のClaude Codeには、ほかの経路で入れる。
+このSkillはclaude.aiのサポート外で、リリースに`.skill`を添付しない。手元のClaude Codeには、ほかの経路で入れる。
 
 ### GitHub CLI（gh skill、gh 2.90以降）
 

@@ -18,13 +18,18 @@
 
 ### claude.ai（Cowork・クラウドセッション）
 
-[最新のリリース](https://github.com/ngram/skills/releases/latest)に添付した`repo-privacy-audit.skill`をダウンロードし、claude.aiのCustomize > Skillsで「+」→「Create skill」→「Upload a skill」の順に進んでアップロードする。同じ中身の`repo-privacy-audit.zip`も添付してあり、どちらをアップロードしてもよい。最新版は次のURLでも取得できる。
+[最新のリリース](https://github.com/ngram/skills/releases/latest)に添付した`repo-privacy-audit.skill`を、claude.aiに入れる。最新版は次のURLで取得できる。
 
 ```text
 https://github.com/ngram/skills/releases/latest/download/repo-privacy-audit.skill
 ```
 
-claude.aiに入れたSkillは、Coworkとクラウドセッション、claude.aiにログインした手元のClaude Codeにも同期される。更新するときは、新しい版の`.skill`をアップロードし直す。
+入れ方は次の2つ。
+
+- Claudeのセッションで、Claudeにこの`.skill`をファイルとして渡してもらい、ファイルのカードの「Save skill」を押す
+- claude.aiのCustomize > Skillsで「+」→「Create skill」→「Upload a skill」の順に進んでアップロードする。`.skill`を選べないときは、拡張子を`.zip`に変える（中身はZIP）
+
+claude.aiに入れたSkillは、Coworkとクラウドセッション、claude.aiにログインした手元のClaude Codeにも同期される。更新するときは、新しい版の`.skill`を同じ方法で入れ直す。
 
 ### GitHub CLI（gh skill、gh 2.90以降）
 
