@@ -89,8 +89,15 @@ echo "スナップショット保存: $BEFORE"
 ```bash
 CODEX_OUT="${REVIEW_DIR}/r${ROUND}_codex.md"
 
-codex exec -s read-only \
-  "あなたはソフトウェア設計のレビュアーです。
+# プロンプトは引数ではなく一時ファイル経由で標準入力から渡す。
+# 引数で渡すと、長いPlanでWindowsのコマンドラインの長さの上限を超える。
+PROMPT_FILE="$(mktemp)" || exit 1
+trap 'rm -f "$PROMPT_FILE"' EXIT
+
+# 区切りを 'EOF' と引用符で囲み、文面の $ やバッククォートを展開させない。
+{
+cat <<'EOF'
+あなたはソフトウェア設計のレビュアーです。
 以下のPlanドキュメントを読み、技術的な問題点・曖昧さ・抜け漏れを具体的に指摘してください。
 
 【レビュー観点】
@@ -101,14 +108,19 @@ codex exec -s read-only \
 - セキュリティ・パフォーマンス上のリスクがないか
 
 【Planの内容】
-$(cat "$PLAN_FILE")
+EOF
+cat "$PLAN_FILE"
+cat <<'EOF'
 
 【出力形式】
 指摘事項を番号付きリストで記載すること。
 最後の行は必ず以下のいずれかで終わること：
 VERDICT: APPROVED
-VERDICT: REVISE" \
-  > "$CODEX_OUT" 2>&1
+VERDICT: REVISE
+EOF
+} > "$PROMPT_FILE"
+
+codex exec -s read-only - < "$PROMPT_FILE" > "$CODEX_OUT" 2>&1
 
 echo "=== Codex レビュー結果 (r${ROUND}) ==="
 cat "$CODEX_OUT"
