@@ -54,7 +54,7 @@ claude.aiに入れたSkillは、Coworkとクラウドセッション、claude.ai
 - 手元で`gh skill publish --tag v0.1.0`を実行して作ってもよい。このコマンドは`agent-skills`トピックも付ける。公開すると、`.github/workflows/release-assets.yml`が`.skill`を作ってリリースに添付する
 - 同じ`.skill`は`node scripts/package-skills.mjs`で手元でも作れる（`dist/`に出力する）。frontmatterにclaude.aiのアップロードで拒否されることがあるキー（skill-creatorの検証が許していないキー）があれば、警告を出す
 - claude.aiで使えないSkillは、frontmatterの`metadata`に`claude-ai: unsupported`を書く。そのSkillの`.skill`は作らず、READMEのclaude.aiの節もサポート外の案内になる
-- リリースのあと、Claude Codeのクラウドセッションで`node scripts/check-skill-updates.mjs`を実行すると、claude.aiに入っているSkillと最新のリリースの`.skill`を比べ、入れ直しが要る`.skill`を`dist/skill-updates/`に置く。Claudeがこのファイルをセッションに送ると、ファイルのカードの「Save skill」で入れられる。リリースのたびにこれを行うRoutineの設定は、[設計書](docs/design.md)の「claude.aiへの反映」の節にある
+- リリースのあと、Claude Codeのクラウドセッションで`node scripts/check-skill-updates.mjs`を実行すると、claude.aiに入っているSkillと最新のリリースの`.skill`を比べ、入れ直しが要る`.skill`を`dist/skill-updates/`に置く。Claudeがこのファイルをセッションに送ると、ファイルのカードの「Save skill」で入れられる。このリポジトリで作業するセッションでは、リリースを作り終えたときと、頼まれたときに、Claudeがこれを行う（`CLAUDE.md`、[設計書](docs/design.md)の「claude.aiへの反映」の節）
 - 不変リリース（immutable releases）を有効にしても、`release`ワークフローはそのまま使える。`gh skill publish`で作る場合は、公開したリリースに`.skill`を添付できないので、タグをpushして下書きのリリースを作り、`release-assets`をworkflow_dispatchで実行してから公開する
 
 ## ライセンス

@@ -169,26 +169,22 @@ ZIPは添付しない。理由は次のとおり。
 
 GitHubのリリースをclaude.aiに知らせる仕組みも、自動で入れ直す仕組みも無い。そこで、Claude Codeのクラウドセッションで最新のリリースと見比べ、入れ直しが要る`.skill`だけをセッションに送る。利用者の操作は、届いたファイルのカードの「Save skill」を押すことだけになる。
 
-1. リリースを作る（`release`ワークフロー）
-2. クラウドセッションで`node scripts/check-skill-updates.mjs`を実行する
+自動では行わず、次のときにセッションの中で行う。手順は`CLAUDE.md`に書いたので、このリポジトリで作業するセッションのClaudeが行う。
+
+- 利用者に頼まれたとき（「claude.aiのSkillを更新して」「最新の.skillを出して」など）
+- Claudeがセッションの中でリリースを作ったとき（`release`ワークフローの実行が成功したあと）
+
+手順は次のとおり。
+
+1. `node scripts/check-skill-updates.mjs`を実行する
    - 最新の版（`v`で始まるタグのうち最新のもの）のリリースから`<name>.skill`をダウンロードする（`.skill`の無い古い版では`<name>.zip`を使う）
    - claude.aiの写し（`~/.claude/skills/synced/<id>/<name>/`）と中身を比べ、Skillごとに「同じ」「更新あり」「未導入」「省略」（claude.aiのサポート外）「確かめられない」のどれかを出す
    - claude.aiは取り込むときに`name`を引用符で囲むことがあるので、frontmatterの値の引用符の有無は比べない。`README.md`は利用者向けの説明でClaudeの動作には使わないので比べない
    - 「更新あり」と「未導入」のSkillの`.skill`だけを`dist/skill-updates/`に置く
-3. Claudeが置かれた`.skill`をセッションに送る（`SendUserFile`）。ファイルのカードに「Save skill」のボタンが出る
-4. ボタンを押すとclaude.aiのSkillが入れ替わり、Claude Codeのセッションにはセッションの開始時と、その後およそ10分ごとに同期される（公式のヘルプによる）
+2. Claudeが置かれた`.skill`をセッションに送り（`SendUserFile`）、リリースのURLもあわせて示す。ファイルのカードに「Save skill」のボタンが出る。送るものが無ければ、その旨を伝える
+3. ボタンを押すとclaude.aiのSkillが入れ替わり、Claude Codeのセッションにはセッションの開始時と、その後およそ10分ごとに同期される（公式のヘルプによる）
 
-この手順をリリースのたびに自動で行うには、Routineを使う。RoutineはGitHubの「Release」のイベント（公開など）をきっかけに動ける。その場合は、イベントごとに新しいクラウドセッションが作られる。既存のセッションには書き込めない。GitHubのイベントをきっかけにするRoutineは、claude.ai/code/routinesの画面などから作る（クラウドセッションの中からは作れない）。Routineに設定するプロンプトの案は次のとおり。
-
-```text
-ngram/skillsの最新のリリースの.skillのうち、claude.aiに入れ直しが要るものを、このセッションに届ける。
-
-1. ngram/skillsのリポジトリのルートで作業する。cloneされていなければ、git clone https://github.com/ngram/skills で取ってくる
-2. node scripts/check-skill-updates.mjs --json --out /tmp/skill-updates を実行する。claude.aiのSkillの同期がまだ終わっていないと、すべてが未導入（missing）になる。そのときは1分待ってからやり直す
-3. 結果のうち、statusがupdateかmissingのSkillについて、fileに置かれた.skillをSendUserFileで1つずつ送る（statusはproactive）。キャプションには、版、Skill名、更新か未導入か、違うファイル（differs）を書く
-4. 最後に、リリースのURL（releaseUrl）と、送ったSkill、同じだったSkill、省略したSkillを短く報告する。送るものが無ければ、その旨を1行で報告する
-5. ファイルの変更、コミット、push、リリースの変更はしない
-```
+リリースのたびに自動で行いたくなったときは、Routineを使える。RoutineはGitHubの「Release」のイベントをきっかけに動けるが、イベントごとに新しいクラウドセッションが作られ、既存のセッションには書き込めない。
 
 ## CI
 
