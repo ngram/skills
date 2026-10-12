@@ -54,3 +54,18 @@
 
 - adewale/good-readme（MIT）：作成と改善のモード、採点表、アンチパターン（The Novel、Wall of Text、API Dump）、「Link, don't duplicate」。長さの目安は単純なツールで50〜200行。主眼は実装とのずれで、分量を計る仕組みは無く、日本語も想定していない。<https://github.com/adewale/good-readme>
 - 網羅的なREADMEを作る方向のSkill（GLINCKER readme-generatorなど）や、GitHubのプロフィールのREADME向けのSkillは、目的が違う
+
+## 評価
+
+5つの課題を、このSkillを使う場合と使わない場合で1回ずつ解かせ、`scripts/readme_stats.mjs`で比べた（2026年10月）。
+
+| 課題 | Skillなし | Skillあり |
+|---|---|---|
+| temotoのREADME（764行）を短くする | 141行。移した内容の欠落なし | 148行。段階をstandardと判断し、理由を示した。移した内容の欠落なし |
+| 同じ課題で、検索構文をREADMEに残す | 204行で予算を超え、コードの1行と設定の名前などが欠落 | 200行。`keep`で検索構文を残し、移した内容の欠落なし |
+| twtyのREADME（169行）を見直す | 252行に増え、節を組み替えた | 183行。誤り（プロキシの環境変数、古いオプションの一覧など）だけを直し、組み替えは提案にとどめた |
+| READMEの無いGoのライブラリ | 69行。関数の表と文字の範囲の節があり、pkg.go.devへの案内なし | 37行。最小の例とpkg.go.devへの案内。Exampleの関数を足すのは提案にとどめた |
+| READMEの無いNode.jsのCLI | 122行、H2が9個 | 54行、H2が4個。Goの内容は混ざらなかった |
+
+- twtyとGoのライブラリの「Skillあり」は、手順を直したあとの2回目の結果である。1回目は、予算に収まっていたtwtyのREADMEの節を移してまとめ、Goのライブラリでは頼まれていない`example_test.go`を作った
+- 日本語のREADMEの地の文の表示幅は、Skillありで3,200〜3,300桁で、上限の4,800桁に収まった。日本語のために別の上限は設けない
