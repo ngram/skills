@@ -32,7 +32,7 @@
 ## 例の置き場所
 
 - 2つ目以降の例は、`example_test.go`のExampleの関数（`func ExampleToKatakana()`など）に書く。pkg.go.devに関数ごとに表示され、`// Output:`のコメントがあれば`go test`で出力も確かめられる
-- READMEの最小の例は、Exampleの関数の1つと同じ内容にして、`go test`で確かめられるようにする
+- Exampleの関数があれば、READMEの最小の例はその1つと同じ内容にする（`go test`で確かめられる）。無ければ、READMEの例を実際に動かして確かめ、Exampleの関数を足すことを提案する。頼まれずに`example_test.go`を作らない
 
 ## オプションの一覧の取り方
 
