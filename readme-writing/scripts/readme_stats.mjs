@@ -17,7 +17,11 @@
 // 地の文の行数と節の行数の上限は、指定が無ければ全体の上限の30%とする。地の文の表示幅の上限は、地の文の上限×80桁とする。
 // 使い方の節（Usage、使い方など）と、設定ファイルの keep に書いた節には、節の行数の上限をかけない。
 //
-// 終了コード: 0 は指摘なし、1 は指摘あり（予算の超過、リンクの切れ、--moved-from で見つからないもの）、
+// 予算のほかに、README の日本語の箇条書き（番号付きの手順を含む）と表のセルが、体言止めかを確かめる。判定は
+// git-commit スキルの check_message.mjs と同じである。自動生成のブロック（<!-- 〜:begin --> から <!-- 〜:end --> まで）と
+// コードブロックは見ない。
+//
+// 終了コード: 0 は指摘なし、1 は指摘あり（予算の超過、体言止めでない項目、リンクの切れ、--moved-from で見つからないもの）、
 // 2 は使い方か設定ファイルの誤り。「注意」（長いコードブロック、見つからない見出しなど）は終了コードに含めない。
 
 import { existsSync, readFileSync, statSync } from "node:fs";
@@ -75,6 +79,17 @@ const HTML = /^[ \t]*<(?:\/?[A-Za-z]|!--)/u;
 // 画像やバッジだけの行。
 const MEDIA = /^[ \t]*(?:\[?!\[[^\]]*\]\([^)]*\)(?:\]\([^)]*\))?[ \t]*)+$/u;
 const SCHEME = /^(?:[A-Za-z][A-Za-z0-9+.-]*:|\/\/)/u;
+
+// 自動生成のブロックの始まりと終わりの目印（<!-- skills:list:begin … --> など）。
+const GENERATED_BEGIN = /^[ \t]*<!--\s*\S+:begin\b/u;
+const GENERATED_END = /^[ \t]*<!--\s*\S+:end\b/u;
+const JAPANESE = /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u;
+// 体言止めでない終わり方。git-commit スキルの check_message.mjs と同じ判定である。
+const PREDICATE_END = /(?:[うくぐすぶむるただ]|ない|無い|しい|です|ます|よい|きい|さい|[多長古早遅重軽高低強弱良広狭近遠]い)$/u;
+// 上の形に当たるが、名詞として項目の終わりに来る語。
+const NOUN_END = /(?:近く|多く|遠く)$/u;
+// 末尾の句点、空白、括弧書き。
+const TRAILER = /(?:[。.\s]+|（[^（）]*）|\([^()]*\))$/u;
 
 class UsageError extends Error {}
 
@@ -257,6 +272,17 @@ function classify(text) {
     }
   }
   return rows;
+}
+
+// 体言止めでなければ、終わりの数文字を返す。git-commit スキルの check_message.mjs と同じ関数である。
+function predicateEnding(text) {
+  let s = text;
+  for (let prev = null; s !== prev; ) {
+    prev = s;
+    s = s.replace(TRAILER, "");
+  }
+  if (!PREDICATE_END.test(s) || NOUN_END.test(s)) return null;
+  return [...s].slice(-3).join("");
 }
 
 function proseText(line) {
@@ -572,6 +598,24 @@ function analyze(opts) {
   for (const name of keep) {
     if (!headings.some((h) => h.title === name)) problems.push({ severity: "warn", at: configPath, message: `keep の「${name}」に当たる見出しが README に無い` });
   }
+
+  // 箇条書き（番号付きの手順を含む）と表のセルの体言止め。自動生成のブロックとコードブロックは見ない。
+  let generated = false;
+  doc.rows.forEach((r, i) => {
+    if (r.type === "html" && GENERATED_BEGIN.test(r.text)) generated = true;
+    const inGenerated = generated;
+    if (r.type === "html" && GENERATED_END.test(r.text)) generated = false;
+    if (inGenerated) return;
+    const items = [];
+    if (r.type === "prose" && r.list) items.push(["箇条書き", proseText(r.text)]);
+    if (r.type === "table" && !/^[\s|:-]+$/u.test(r.text)) {
+      for (const cell of r.text.trim().replace(/^\|/u, "").replace(/\|$/u, "").split("|")) items.push(["表のセル", plain(cell)]);
+    }
+    for (const [what, text] of items) {
+      const ending = JAPANESE.test(text) ? predicateEnding(text) : null;
+      if (ending) problems.push({ severity: "error", at: `${readme}:${i + 1}`, message: `${what}が体言止めになっていない（「…${ending}」で終わる）` });
+    }
+  });
 
   const deep = headings.filter((h) => h.level > lim("maxHeadingDepth"));
   if (deep.length > 0) {
