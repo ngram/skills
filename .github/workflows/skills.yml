@@ -32,3 +32,16 @@ jobs:
         run: |
           gh --version
           gh skill publish --dry-run
+
+  # Skill の補助スクリプトは手元の Windows でも使うので、パスの区切りなどの違いを Windows でも確かめる。
+  test-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Check generated files and skill frontmatter
+        run: node scripts/sync-skills.mjs --check
+      - name: Test helper scripts
+        run: node --test tests/*.test.mjs
