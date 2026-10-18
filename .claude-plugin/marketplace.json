@@ -23,7 +23,7 @@
     {
       "name": "plan-review",
       "source": "./plan-review",
-      "description": "Codexによる、plan/配下のPlanファイルのレビュー"
+      "description": "CodexかClaudeによる、plan/配下のPlanファイルのレビュー"
     },
     {
       "name": "readme-writing",

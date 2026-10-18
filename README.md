@@ -10,7 +10,7 @@
 | 経路 | コマンド |
 | --- | --- |
 | Claude Code・Claude Desktop（プラグイン） | `/plugin marketplace add ngram/skills`のあと`/plugin install <name>@ngram-skills` |
-| claude.ai（Cowork・クラウドセッション） | [リリース](https://github.com/ngram/skills/releases/latest)に添付した`<name>.skill`の、セッションのファイルのカードの「Save skill」か、claude.aiのCustomize > Skillsのアップロードでの導入（`plan-review`はサポート外） |
+| claude.ai（Cowork・クラウドセッション） | [リリース](https://github.com/ngram/skills/releases/latest)に添付した`<name>.skill`の、セッションのファイルのカードの「Save skill」か、claude.aiのCustomize > Skillsのアップロードでの導入 |
 | GitHub CLI（gh 2.90以降） | `gh skill install ngram/skills <name> --agent claude-code --scope user` |
 | [APM](https://github.com/microsoft/apm) | `apm install -g ngram/skills/<name>` |
 | [skills CLI](https://github.com/vercel-labs/skills) | `npx skills add ngram/skills --skill <name>` |
@@ -38,7 +38,7 @@ claude.aiに入れたSkillは、Coworkとクラウドセッション、claude.ai
 | [git-commit](git-commit/) | Gitのステージング、日本語のコミットメッセージ案とプルリクエストのタイトル・本文の作成、コミットの手順と書式 | gitとNode.js 18以降が必要 | [MIT](LICENSE) |
 | [japanese-tech-writing](japanese-tech-writing/) | 日本語の技術文書・書籍原稿の文章規範 | 空白の検査と修正（scripts/fix_spacing.mjs）にはNode.js 18以降が必要 | Unlicense AND MIT。取り込み元の部分はUnlicense（[LICENSE.txt](japanese-tech-writing/LICENSE.txt)）、ngram/skillsで足した部分はMIT（[LICENSE-MIT.txt](japanese-tech-writing/LICENSE-MIT.txt)） |
 | [plan-create](plan-create/) | 実装の前の計画（Plan）の作成と、plan/YYYYMMDD_機能名.mdへの保存 | なし | [MIT](LICENSE) |
-| [plan-review](plan-review/) | Codexによる、plan/配下のPlanファイルのレビュー | Claude Code向け（引数の置換とdisable-model-invocationを使う）。手元のbashとcodex CLIが必要で、claude.aiはサポート外 | [MIT](LICENSE) |
+| [plan-review](plan-review/) | CodexかClaudeによる、plan/配下のPlanファイルのレビュー | Claude Code（手元とクラウドセッション）向け（引数の置換とdisable-model-invocationを使う）。bashと、codex CLIかclaude CLIが必要。claude.aiのチャットは対象外 | [MIT](LICENSE) |
 | [readme-writing](readme-writing/) | 初めての人が使い始めるための入口としての、短いREADMEの作成と見直し | 計測のスクリプト（scripts/readme_stats.mjs）にはNode.js 18以降が必要 | [MIT](LICENSE) |
 | [repo-privacy-audit](repo-privacy-audit/) | リポジトリと公開済みのパッケージの、個人情報・秘密情報・機微情報の検査と、値を伏せた報告 | gitとNode.js 18以降が必要。公開済みのパッケージを調べるときは、各レジストリのコマンド（gem、npmなど）とネットワーク接続も必要 | [MIT](LICENSE) |
 <!-- skills:list:end -->

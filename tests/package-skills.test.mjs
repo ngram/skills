@@ -70,7 +70,10 @@ test("claude.ai のサポート外ではなく、frontmatter に skill-creator �
   const out = mkdtempSync(join(tmpdir(), "package-skills-"));
   const r = run("--out", out);
   assert.equal(r.status, 0, r.stderr);
-  const allowed = new Set(["name", "description", "license", "allowed-tools", "metadata", "compatibility"]);
+  const allowed = new Set([
+    "name", "description", "license", "allowed-tools", "metadata", "compatibility",
+    "argument-hint", "disable-model-invocation",
+  ]);
   for (const name of skillsAtHead()) {
     const fm = frontmatterAtHead(name);
     const extra = fm.keys.filter((k) => !allowed.has(k));
@@ -89,9 +92,9 @@ test("印の有無で、作るか省くかと警告が決まる（一時的な�
   mkdirSync(join(repo, "scripts"));
   copyFileSync(SCRIPT, join(repo, "scripts", "package-skills.mjs"));
   const skills = {
-    plain: "---\nname: plain\ndescription: 印も余分なキーも無い\n---\n",
-    extra: "---\nname: extra\ndescription: 余分なキーがある\nargument-hint: x\n---\n",
-    local: "---\nname: local\ndescription: claude.ai のサポート外\nargument-hint: x\nmetadata:\n  claude-ai: unsupported\n---\n",
+    plain: "---\nname: plain\ndescription: 印も余分なキーも無い（argument-hint と disable-model-invocation は許す）\nargument-hint: x\ndisable-model-invocation: true\n---\n",
+    extra: "---\nname: extra\ndescription: 余分なキーがある\nmodel: x\n---\n",
+    local: "---\nname: local\ndescription: claude.ai のサポート外\nmodel: x\nmetadata:\n  claude-ai: unsupported\n---\n",
   };
   for (const [name, text] of Object.entries(skills)) {
     mkdirSync(join(repo, name));
@@ -105,7 +108,7 @@ test("印の有無で、作るか省くかと警告が決まる（一時的な�
   assert.ok(existsSync(join(out, "plain.skill")) && existsSync(join(out, "extra.skill")));
   assert.ok(!existsSync(join(out, "local.skill")) && !existsSync(join(out, "local.zip")));
   assert.match(r.stdout, /省略: local/);
-  assert.match(r.stderr, /警告: extra の frontmatter の argument-hint/);
+  assert.match(r.stderr, /警告: extra の frontmatter の model/);
   assert.doesNotMatch(r.stderr, /警告: (plain|local) /);
 });
 
