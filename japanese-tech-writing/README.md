@@ -77,6 +77,7 @@ Skillの内容は[SKILL.md](./SKILL.md)にある。
 `SKILL.md`は、取り込み元の内容に次の部分を足したものである。取り込み元の行は、frontmatterの`license`を除いて変えていない（改行をLFにそろえた以外）。`license`は、取り込み元の部分と足した部分のライセンスを示すように書き換えた。
 
 - 末尾の「日本語と英数字の間の空白」の節と、その節が使う`scripts/fix_spacing.mjs`。`git-commit`のSkillが行っている、日本語と英数字の間の空白の除去と検査を移植した
+- 末尾の「見出しと用語の逐語訳」と「手順の書き方」の節。英語の用語を語ごとに訳した見出しと、必須と任意が混ざった手順を避けるための規範で、取り込み元の「見出しの付け方」と、術語・訳語の規則を補う
 - frontmatterの`compatibility`の行
 
 足した部分は、ngram/skillsのほかのSkillと同じく[MIT License](./LICENSE-MIT.txt)とする（Copyright (c) 2026 ngram）。取り込み元の部分はUnlicenseのままである。取り込み元の部分の変更は、取り込み元に提案する。

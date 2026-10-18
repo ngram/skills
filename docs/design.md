@@ -143,6 +143,7 @@ ZIPは添付しない。理由は次のとおり。
   - frontmatter、コードブロック、インラインコードの中、URLの前後、行頭の書式の記号の後ろ、表の区切りと強調の記号とHTMLのコメントの区切りの隣は変えない。空白を除くとMarkdownの解釈やURLの範囲が変わるため
   - 全角文字の判定表は`check_message.mjs`の写しを持つ。Skillは1つずつ入れられるので、隣のSkillのファイルは参照できない
   - 全角の絵文字と記号（U+2300〜U+2BFF、U+1F000〜U+1FAFF）は日本語として扱わない。「🤖 Generated」のような空白を除かないため
+- 末尾への「見出しと用語の逐語訳」と「手順の書き方」の節の追加（HTMLのコメントの下、「日本語と英数字の間の空白」の節の前）。`readme-writing`でこのリポジトリのREADMEを見直したときに、英語の用語を語ごとに訳した見出し（「版の固定」）と、決まり・必須の手順・任意の手順が混ざった「開発」の節が直らなかったことから足した。日本語の技術文書に一般に当てはまるので、`japanese-tech-writing`を参照するSkill（`git-commit`、`plan-create`、`readme-writing`）のすべてで使えるよう、ここに置いた
 - frontmatterへの`compatibility`の追加（スクリプトにNode.js 18以降が要る）
 
 ## frontmatterの扱い
