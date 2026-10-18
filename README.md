@@ -45,7 +45,7 @@ claude.aiに入れたSkillは、Coworkとクラウドセッション、claude.ai
 
 `git-commit`、`plan-create`、`readme-writing`は、`japanese-tech-writing`が入っていれば、書く文章（コミットメッセージやプルリクエストの本文、Plan、README）をその規範に合わせる。
 
-`japanese-tech-writing`は、keiichiro shikano氏が[gist](https://gist.github.com/fd287c3133457c4fd8f5601d34aa817d)で公開しているSkillに、見出しと用語の逐語訳、手順の書き方、表のセルの書き方、日本語と英数字の間の空白の4つの節と、空白を除くスクリプトを足して収録したものである（取り込み元の部分はUnlicense、足した部分はMIT。「ライセンス」の節）。取り込み元の行は、frontmatterの`license`を除いて変えていない。
+`japanese-tech-writing`は、keiichiro shikano氏が[gist](https://gist.github.com/fd287c3133457c4fd8f5601d34aa817d)で公開しているSkillに、見出しと用語の逐語訳、手順の書き方、表のセルの書き方、日本語と英数字の間の空白の4つの節と、空白を除くスクリプトを足して収録したものである（取り込み元の部分はUnlicense、足した部分はMIT）。取り込み元の行は、frontmatterの`license`を除いて変えていない。
 
 ## 開発
 
@@ -53,5 +53,4 @@ claude.aiに入れたSkillは、Coworkとクラウドセッション、claude.ai
 
 ## ライセンス
 
-Skillごとに独自のライセンスを持つことがある。その場合は、Skillのディレクトリにある`LICENSE.txt`を参照する（`japanese-tech-writing`は、取り込み元の部分がUnlicense（`LICENSE.txt`）、このリポジトリで足した部分がMIT（`LICENSE-MIT.txt`））。
-ライセンスを明示していないSkillは、[MIT License](LICENSE)とする。
+Skillごとに独自のライセンスを持つ。各Skillフォルダを参照のこと。
