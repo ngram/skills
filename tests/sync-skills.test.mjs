@@ -64,6 +64,17 @@ test("一覧の表とマーケットプレイスには、description の最初�
   assert.equal(catalog.plugins[0].description, "計画の作成とファイルへの保存");
 });
 
+test("SKILL.md にドル記号と数字の並びがあれば、Claude Code が引数で置き換えるとして失敗する", () => {
+  const dir = fixture("計画の作成。");
+  writeFileSync(join(dir, "sample", "SKILL.md"), "---\nname: sample\ndescription: 計画の作成。\nlicense: MIT\n---\n\n# sample\n\n```bash\ncase \"$1\" in\n```\n");
+  const r = sync(dir);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /sample: SKILL\.md の10行目に「\$1」がある/);
+
+  writeFileSync(join(dir, "sample", "SKILL.md"), "---\nname: sample\ndescription: 計画の作成。\nlicense: MIT\n---\n\n# sample\n\n```bash\necho \"${1}\" \"$ARGUMENTS\"\n```\n");
+  assert.equal(sync(dir).status, 0, "波括弧で囲んだ形と $ARGUMENTS は通る");
+});
+
 test("一覧の表のライセンスの列で、license に書いたファイルと、ルートの LICENSE をリンクにする", () => {
   const dir = fixture("計画の作成。", undefined, "Unlicense AND MIT。元の部分はUnlicense（LICENSE.txt）、足した部分はMIT（LICENSE-MIT.txt）");
   writeFileSync(join(dir, "sample", "LICENSE.txt"), "Unlicense\n");

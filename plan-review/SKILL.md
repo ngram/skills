@@ -86,21 +86,26 @@ fi
 ARGS="$ARGUMENTS"
 REVIEWER_ARG=""
 PLAN_ARG=""
+# 位置引数（ドル記号と数字）は使わない。Claude CodeはSkillの本文のそれを、引数のn番目で置き換えるため。
+WANT_VALUE=""
 set -f
-set -- $ARGS
-set +f
-while [ $# -gt 0 ]; do
-  case "$1" in
-    --reviewer=*) REVIEWER_ARG="${1#--reviewer=}"; shift ;;
-    --reviewer)
-      if [ $# -lt 2 ]; then
-        echo "エラー: --reviewerの後に、codex、claude、autoのどれかを書いてください。"
-        exit 1
-      fi
-      REVIEWER_ARG="$2"; shift 2 ;;
-    *) PLAN_ARG="$1"; shift ;;
+for WORD in $ARGS; do
+  if [ -n "$WANT_VALUE" ]; then
+    REVIEWER_ARG="$WORD"
+    WANT_VALUE=""
+    continue
+  fi
+  case "$WORD" in
+    --reviewer=*) REVIEWER_ARG="${WORD#--reviewer=}" ;;
+    --reviewer) WANT_VALUE="yes" ;;
+    *) PLAN_ARG="$WORD" ;;
   esac
 done
+set +f
+if [ -n "$WANT_VALUE" ] || { [ -z "$REVIEWER_ARG" ] && [[ " $ARGS " == *" --reviewer= "* ]]; }; then
+  echo "エラー: --reviewerの後に、codex、claude、autoのどれかを書いてください。"
+  exit 1
+fi
 
 if [ -n "$REVIEWER_ARG" ]; then
   REVIEWER="$REVIEWER_ARG"; HOW="引数"

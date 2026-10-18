@@ -79,10 +79,17 @@ function runBlock(dir, script, { vars = {}, env = {} } = {}) {
 
 const read = (dir, path) => readFileSync(join(dir, path), "utf8");
 
-// レビューする側を決めるコードブロックを、$ARGUMENTS を args に置き換えて実行する。
+// Claude Code がSkillを呼ぶときの置き換えをまねる。$ARGUMENTS を引数の全体に、ドル記号と数字（$0、$1 など）を
+// 引数のn番目（0から数える）に置き換える。n番目が無ければ、そのまま残す。
+function substitute(text, args) {
+  const words = args.split(/\s+/u).filter(Boolean);
+  return text.replaceAll("$ARGUMENTS", args).replace(/\$(\d+)/gu, (all, n) => words[Number(n)] ?? all);
+}
+
+// レビューする側を決めるコードブロックを、引数を置き換えて実行する。
 function choose(args, { commands = ["codex", "claude"], env = {} } = {}) {
   const dir = workspace(commands);
-  const script = `${block("レビューする側を決める").replaceAll("$ARGUMENTS", args)}\necho "RESULT=$REVIEWER|$PLAN_ARG"`;
+  const script = `${substitute(block("レビューする側を決める"), args)}\necho "RESULT=$REVIEWER|$PLAN_ARG"`;
   const r = runBlock(dir, script, { env });
   const result = r.stdout.match(/^RESULT=(.*)\|(.*)$/mu);
   return { ...r, reviewer: result?.[1], planArg: result?.[2] };
@@ -130,6 +137,10 @@ test("不正な値、値の無い --reviewer、明示した側のコマンドが
   assert.match(r.stdout, /「gemini」（引数）は使えません/u);
 
   r = choose("x --reviewer");
+  assert.equal(r.status, 1);
+  assert.match(r.stdout, /--reviewerの後に/u);
+
+  r = choose("--reviewer=");
   assert.equal(r.status, 1);
   assert.match(r.stdout, /--reviewerの後に/u);
 
