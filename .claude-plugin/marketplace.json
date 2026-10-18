@@ -8,7 +8,7 @@
     {
       "name": "git-commit",
       "source": "./git-commit",
-      "description": "Git のステージング、日本語のコミットメッセージ案の作成、コミットの手順と書式。"
+      "description": "Git のステージング、日本語のコミットメッセージ案とプルリクエストのタイトル・本文の作成、コミットの手順と書式。"
     },
     {
       "name": "japanese-tech-writing",

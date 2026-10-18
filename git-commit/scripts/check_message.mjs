@@ -13,6 +13,10 @@
 //   - バッククォートの外に、HTTP のメソッドとパスがくっついた形（GET/v1/views）が無いか。
 //     textlint の ja-no-space-around-slash は、半角どうしの間でもスラッシュの前の空白を消すので、
 //     「GET /v1/views」を書き換えてしまう。コマンドやパスはバッククォートで囲むと守られる
+//   - 1行目と箇条書きの各項目が、体言止めになっているか（「〜する」「〜が無い」「〜です」などで終わっていないか）。
+//     末尾の「。」と括弧書きは除いて見る。語の形だけで判断する目安なので、名詞なのに当たるときは言い換える
+//   - 本文に、箇条書きでない日本語の行（段落、表）が無いか。本文は節の見出しと箇条書きで書く。
+//     日本語を含まない行（Co-Authored-By などのトレーラー、URL、生成元の表示）とコードブロックは見ない
 //
 // 規則に合わない行があれば、その行を示して終了コード1で終わる。
 
@@ -31,6 +35,28 @@ const CODE_SPAN = /`[^`]*`/gu;
 // 前の文字の判定は Python の \b（Unicode の英数字と _ を語の文字とみなす）に合わせる。
 const GLUED_METHOD = /(?<![\p{L}\p{N}_])(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\//gu;
 const SPACED = /(\S)([ \t]+)(\S)/gu;
+// 箇条書きの行頭の記号（見出しの # は含めない）。
+const BULLET = /^\s*(?:[-*+]|\d+\.)\s+/u;
+const FENCE = /^\s*(```|~~~)/u;
+const HEADING = /^\s*#/u;
+const JAPANESE = /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u;
+// 体言止めでない終わり方。動詞の終止形・過去形、形容詞、「です」「ます」など。
+const PREDICATE_END = /(?:[うくぐすぶむるただ]|ない|無い|しい|です|ます|よい|きい|さい|[多長古早遅重軽高低強弱良広狭近遠]い)$/u;
+// 上の形に当たるが、名詞として項目の終わりに来る語。
+const NOUN_END = /(?:近く|多く|遠く)$/u;
+// 末尾の句点、空白、括弧書き。
+const TRAILER = /(?:[。.\s]+|（[^（）]*）|\([^()]*\))$/u;
+
+// 体言止めでなければ、終わりの数文字を返す。
+function predicateEnding(text) {
+  let s = text;
+  for (let prev = null; s !== prev; ) {
+    prev = s;
+    s = s.replace(TRAILER, "");
+  }
+  if (!PREDICATE_END.test(s) || NOUN_END.test(s)) return null;
+  return [...s].slice(-3).join("");
+}
 
 // East Asian Width が W（全角）または F（Fullwidth）の範囲。Unicode 15.1 の unicodedata から生成した。
 const WIDE_RANGES = [
@@ -108,12 +134,23 @@ function main(argv) {
   const text = readFileSync(argv[0], "utf8").replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
   const lines = text.split("\n");
   let problems = 0;
+  let inFence = false;
   lines.forEach((line, idx) => {
     const i = idx + 1;
     const w = width(line);
     const notes = [];
     if (i === 1 && w > limit) {
       notes.push(`1行目の表示幅が上限 ${limit} 桁を超えている`);
+    }
+    const fence = FENCE.test(line);
+    if (fence) inFence = !inFence;
+    const item = i === 1 ? line.replace(COMMIT_TYPE, "") : !inFence && BULLET.test(line) ? line.replace(BULLET, "") : null;
+    const ending = item === null ? null : predicateEnding(item);
+    if (ending) {
+      notes.push(`体言止めになっていない（「…${ending}」で終わる）。「〜の追加」「〜の状態」のように名詞で終える`);
+    }
+    if (i > 1 && item === null && !fence && !inFence && !HEADING.test(line) && JAPANESE.test(line)) {
+      notes.push("箇条書きになっていない（段落や表）。本文は節の見出しと箇条書きで書く");
     }
     if ((line[0] === " " || line[0] === "\t") && !MARKER.test(line)) {
       notes.push("箇条書きを折り返している。本文は折り返さず、1項目を1行で書く");

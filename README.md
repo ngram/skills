@@ -26,7 +26,7 @@ claude.aiに入れたSkillは、Coworkとクラウドセッション、claude.ai
 <!-- skills:list:begin（scripts/sync-skills.mjs が生成する。このブロックは手で編集しない） -->
 | Skill | 説明 | 必要なもの | ライセンス |
 | --- | --- | --- | --- |
-| [git-commit](git-commit/) | Git のステージング、日本語のコミットメッセージ案の作成、コミットの手順と書式。 | gitとNode.js 18以降が必要 | MIT |
+| [git-commit](git-commit/) | Git のステージング、日本語のコミットメッセージ案とプルリクエストのタイトル・本文の作成、コミットの手順と書式。 | gitとNode.js 18以降が必要 | MIT |
 | [japanese-tech-writing](japanese-tech-writing/) | 日本語の技術文書・書籍原稿の文章規範。 | 空白の検査と修正（scripts/fix_spacing.mjs）にはNode.js 18以降が必要 | Unlicense AND MIT。取り込み元の部分はUnlicense（LICENSE.txt）、ngram/skillsで足した部分はMIT（LICENSE-MIT.txt） |
 | [plan-create](plan-create/) | 実装の前に計画（Plan）を書き、plan/YYYYMMDD_<機能名>.mdに残す。 | なし | MIT |
 | [plan-review](plan-review/) | plan/配下のPlanファイルをCodexにレビューさせ、履歴をplan/.reviews/に残して差分を表示する。 | Claude Code向け（引数の置換とdisable-model-invocationを使う）。手元のbashとcodex CLIが必要で、claude.aiはサポート外 | MIT |
