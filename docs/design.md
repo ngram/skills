@@ -76,6 +76,8 @@ ZIPは添付しない。理由は次のとおり。
 ├── tests/fix_spacing.test.mjs
 ├── tests/package-skills.test.mjs
 ├── tests/check-skill-updates.test.mjs
+├── docs/design.md              この設計書
+├── docs/development.md         開発とリリースの手順。READMEの「開発」の節からリンクする
 ├── .github/workflows/skills.yml
 ├── .github/workflows/release.yml  版を指定してタグ、リリース、.skillを作る
 ├── .github/workflows/release-assets.yml  公開したリリースにSkillごとの.skillを添付する

@@ -234,3 +234,52 @@ test("全角の範囲の表は check_message.mjs と同じ", () => {
   const table = (file) => readFileSync(join(ROOT, file), "utf8").match(/const WIDE_RANGES = \[([\s\S]*?)\];/u)[1];
   assert.equal(table("readme-writing/scripts/readme_stats.mjs"), table("git-commit/scripts/check_message.mjs"));
 });
+
+test("日本語の箇条書き、番号付きの手順、表のセルの体言止めを確かめ、自動生成のブロックとコードブロックは見ない", () => {
+  const dir = repo({
+    "README.md": [
+      "# 名前",
+      "",
+      "## 使い方",
+      "",
+      "- 設定ファイルの作成",
+      "- 設定ファイルを作る",
+      "1. `npm test`の実行（CIでも実行する）",
+      "2. テストを通す。",
+      "- [開発の手順](docs/development.md)",
+      "- Install with `go install`",
+      "",
+      "| 経路 | 入れ方 |",
+      "| --- | --- |",
+      "| npm | `npm install`での導入 |",
+      "| 手元 | フォルダをコピーする |",
+      "",
+      "<!-- skills:list:begin（生成する） -->",
+      "- 生成された項目を手で直さない",
+      "<!-- skills:list:end -->",
+      "",
+      "```sh",
+      "- コードの中は見ない",
+      "```",
+      "",
+    ].join("\n"),
+    "docs/development.md": "# 開発\n",
+  });
+  const r = run("--json", join(dir, "README.md"));
+  assert.equal(r.status, 1);
+  const found = r.json.problems.filter((p) => p.message.includes("体言止め")).map((p) => `${p.at.slice(dir.length + 1)} ${p.message}`);
+  assert.deepEqual(found, [
+    "README.md:6 箇条書きが体言止めになっていない（「…を作る」で終わる）",
+    "README.md:8 箇条書きが体言止めになっていない（「…を通す」で終わる）",
+    "README.md:15 表のセルが体言止めになっていない（「…ーする」で終わる）",
+  ]);
+});
+
+test("体言止めの判定の表と関数は check_message.mjs と同じ", () => {
+  const read = (file) => readFileSync(join(ROOT, file), "utf8");
+  const pick = (text) => [
+    ...["PREDICATE_END", "NOUN_END", "TRAILER"].map((name) => text.match(new RegExp(`^const ${name} = .*$`, "mu"))[0]),
+    text.match(/^function predicateEnding[\s\S]*?^\}$/mu)[0],
+  ];
+  assert.deepEqual(pick(read("readme-writing/scripts/readme_stats.mjs")), pick(read("git-commit/scripts/check_message.mjs")));
+});

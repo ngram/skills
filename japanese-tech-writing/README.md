@@ -72,12 +72,12 @@ Skillの内容は[SKILL.md](./SKILL.md)にある。
 
 - 作者：keiichiro shikano
 - 取り込み元：<https://gist.github.com/fd287c3133457c4fd8f5601d34aa817d>（コミット`8f2d576`）
-- ライセンス：Unlicense（<https://gist.github.com/k16shikano/67625f2a7d96e3bbdfae8d571a936063>）。作者がこのgistに置いた本文を、そのまま[LICENSE.txt](./LICENSE.txt)に収録した
+- ライセンス：Unlicense（<https://gist.github.com/k16shikano/67625f2a7d96e3bbdfae8d571a936063>）。作者がこのgistに置いた本文の、[LICENSE.txt](./LICENSE.txt)へのそのままの収録
 
 `SKILL.md`は、取り込み元の内容に次の部分を足したものである。取り込み元の行は、frontmatterの`license`を除いて変えていない（改行をLFにそろえた以外）。`license`は、取り込み元の部分と足した部分のライセンスを示すように書き換えた。
 
-- 末尾の「日本語と英数字の間の空白」の節と、その節が使う`scripts/fix_spacing.mjs`。`git-commit`のSkillが行っている、日本語と英数字の間の空白の除去と検査を移植した
-- 末尾の「見出しと用語の逐語訳」と「手順の書き方」の節。英語の用語を語ごとに訳した見出しと、必須と任意が混ざった手順を避けるための規範で、取り込み元の「見出しの付け方」と、術語・訳語の規則を補う
+- 末尾の「日本語と英数字の間の空白」の節と、その節が使う`scripts/fix_spacing.mjs`。`git-commit`のSkillが行っている、日本語と英数字の間の空白の除去と検査の移植
+- 末尾の「見出しと用語の逐語訳」と「手順の書き方」の節。英語の用語を語ごとに訳した見出しと、必須と任意が混ざった手順を避けるための規範で、取り込み元の「見出しの付け方」と、術語・訳語の規則を補うもの
 - frontmatterの`compatibility`の行
 
 足した部分は、ngram/skillsのほかのSkillと同じく[MIT License](./LICENSE-MIT.txt)とする（Copyright (c) 2026 ngram）。取り込み元の部分はUnlicenseのままである。取り込み元の部分の変更は、取り込み元に提案する。

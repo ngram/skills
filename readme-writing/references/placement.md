@@ -11,7 +11,7 @@ READMEに置かない内容と、その移す先を示す。リポジトリに�
 | 運用（監視、更新、トラブルシューティング） | `docs/operations.md`、`docs/troubleshooting.md` | リンク |
 | セキュリティ上の前提と制限 | `docs/security.md` | 外部に公開する設定などの注意の1行 |
 | 脆弱性の報告先 | `SECURITY.md` | 無し（GitHubが、Securityのタブとissueを作る画面に案内を出す） |
-| ビルド、テスト、コードの約束 | `CONTRIBUTING.md` | 1行のリンク |
+| 開発の決まり、ビルド、テスト、リリースの手順 | `docs/development.md`（`CONTRIBUTING.md`があればそちら）。予算に収まっていても移す | 「開発」の節に1行のリンク |
 | 変更の履歴 | `CHANGELOG.md`、GitHubのリリース | 無し |
 | ライブラリの関数やオプションの一覧 | APIの文書（ソースのコメントから作られるもの） | APIの文書へのリンク |
 | ライブラリの使用例（2つ目以降） | 言語の節が示す場所（GoはExampleテスト） | 最小の例を1つ |
