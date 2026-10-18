@@ -80,7 +80,7 @@ Skillの内容は[SKILL.md](./SKILL.md)にある。
 
 クラウドセッションには`codex`が入っていない。Codexでレビューさせるときは、環境の設定（セッションのタイトルバーの環境のメニューから「Edit」）で、次の3つを行う。設定は、新しく始めるセッションから効く。
 
-1. Network secrets（無ければ環境変数）への、OpenAIのAPIキーの`OPENAI_API_KEY`としての追加
+1. 環境変数への、OpenAIのAPIキーの`OPENAI_API_KEY`としての追加
 2. Network accessの「Allowed domains」への、`api.openai.com`の追加
 3. Setup scriptへの、次のコマンドの追加
 
@@ -88,5 +88,7 @@ Skillの内容は[SKILL.md](./SKILL.md)にある。
 npm install -g @openai/codex
 printenv OPENAI_API_KEY | codex login --with-api-key
 ```
+
+APIキーは、Network secretsではなく環境変数に入れる。Network secretsのキーが、送信のときにプロキシが差し込む方式だと、Setup scriptの`printenv`では読めず、`codex login`が失敗する（確かめていない）。
 
 設定しないときは、Claudeでレビューする。

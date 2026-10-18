@@ -143,6 +143,8 @@ ZIPは添付しない。理由は次のとおり。
   - `--tools`が絞るのは組み込みのツールだけなので、`--restricted`（利用者とプロジェクトの設定ファイルを読まず、ファイルのツールを作業ディレクトリの中に限る）と`--strict-mcp-config`（MCPサーバーを読み込まない）も付ける。Claude Code 2.1.302で、リポジトリの中のファイルは読めて、外のファイルは拒否されることを確かめた
   - 応答は一時ファイルに書き、0で終わり空でないときだけ`rNN_review.md`にする。0以外で終わったときは、応答をレビュー結果として扱わず、実行ログに移す。`claude -p`はエラーの文も標準出力に書き、途中で止まると途中までの応答が残るため
   - 履歴のファイル名を`rNN_review.md`と`rNN_review.log`にした。前の回の応答は、応答の無い回を飛ばしてさかのぼって探し、前の版の`rNN_codex.md`も読む
+  - Claudeを`--restricted`で呼ぶので、`apiKeyHelper`など、利用者の設定ファイルで認証している環境では失敗するおそれがある（確かめていない）。SKILL.mdに、そのときの代わりの方法を書いた。クラウドセッションでは動く
+  - やり直しは、`ROUND`を1つ増やした新しい回で行う。同じ回で実行し直すと、失敗した回の実行ログが上書きされるため
   - `--reviewer codex`で明示したときは、`codex login status`が失敗しても中断せず、注意を出す。環境変数のAPIキーだけでCodexを使っているときに、ログインの確かめだけが失敗することがあるため
   - モデルと推論の強さの環境変数を、`PLAN_REVIEW_CODEX_*`と`PLAN_REVIEW_CLAUDE_*`に分けた。前の版の`PLAN_REVIEW_MODEL`と`PLAN_REVIEW_EFFORT`は読まない。Claudeの既定は`opus`と`high`
 - 前の版ではclaude.aiのサポート外（`metadata`の`claude-ai: unsupported`）だったが、その印を外した。claude.aiに入れると、クラウドセッションに同期され、`/anthropic-skills:plan-review`で呼べる。claude.aiのチャットでは、Bashと`codex`・`claude`のコマンドが無いので動かない（`compatibility`に書いた）
@@ -178,7 +180,7 @@ ZIPは添付しない。理由は次のとおり。
 - 利用者は、gh skillでは`<name>@v0.1.0`、APMでは`ngram/skills/<name>#v0.1.0`、Claude Codeでは`/plugin marketplace add ngram/skills@v0.1.0`で版を固定できる。claude.aiでは、そのタグのリリースに添付した`<name>.skill`をアップロードする
 - `.skill`は`scripts/package-skills.mjs`が`git archive`（ZIPの形式）で作るので、gitが管理しているファイルだけが入り、ルートにSkillのディレクトリが1つ置かれる（claude.aiはこの形を求める）。ファイル名を`<name>.skill`に固定したので、`https://github.com/ngram/skills/releases/latest/download/<name>.skill`が常に最新版を指す
 - frontmatterの`metadata`に`claude-ai: unsupported`があるSkillは、claude.aiのサポート外として`.skill`を作らない。`sync-skills.mjs`も同じ印を見て、そのSkillのREADMEのclaude.aiの節をサポート外の案内にする。印をSkillのfrontmatterに置くのは、二つのスクリプトが同じところから判断でき、Skillを移しても印が一緒に移るためである。`metadata`はAgent Skillsの仕様が独自の情報のために用意した項目なので、ほかのツールの検証にもかからない
-- `package-skills.mjs`は、claude.aiのサポート外ではないSkillのfrontmatterに、skill-creatorの検証（`quick_validate.py`）が許していないキーがあると警告する。許すのは`name`、`description`、`license`、`allowed-tools`、`metadata`、`compatibility`の6つで、ほかのキーがあるとclaude.aiへのアップロードで拒否されることがある。GitHub Actionsの中では、警告を実行結果の注釈として出す
+- `package-skills.mjs`は、claude.aiのサポート外ではないSkillのfrontmatterに、skill-creatorの検証（`quick_validate.py`）が許していないキーがあると警告する。許すのは`quick_validate.py`の6つ（`name`、`description`、`license`、`allowed-tools`、`metadata`、`compatibility`）と、claude.aiに保存できると確かめた2つ（`argument-hint`、`disable-model-invocation`）で、ほかのキーがあるとclaude.aiへのアップロードで拒否されることがある。GitHub Actionsの中では、警告を実行結果の注釈として出す
   - Claude Code向けの`argument-hint`と`disable-model-invocation`は、警告の対象から外した。`quick_validate.py`は許さないが、この2つを持つ`plan-review`の`.skill`をclaude.aiに保存でき、クラウドセッションに同期された写しにも残ることを確かめた
 - `gh skill publish`などでリリースを公開すると、`.github/workflows/release-assets.yml`がタグの内容から`.skill`を作って添付する。作るためのスクリプトは既定のブランチの最新のものを使うので、古いタグのリリースにも、workflow_dispatchでタグを指定して実行すれば今の形式のファイルを後から添付できる。不変リリースを有効にしていると公開後には添付できないので、その場合はタグをpushして下書きのリリースを作り、`release-assets`をworkflow_dispatchでタグを指定して実行してから公開する
 
