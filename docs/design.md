@@ -9,7 +9,7 @@ zipを展開した3つのSkillを、1つのGitHubリポジトリ（`ngram/skills
 |---|---|---|---|
 | `git-commit` | `SKILL.md`、`scripts/check_message.mjs`、`assets/gitmessage` | ngram・MIT | git、Node.js 18以降 |
 | `japanese-tech-writing` | `SKILL.md`、`scripts/fix_spacing.mjs`、`LICENSE.txt`、`LICENSE-MIT.txt` | keiichiro shikano・Unlicense（ngram/skillsで足した部分はngram・MIT） | なし（スクリプトにはNode.js 18以降） |
-| `plan-review` | `SKILL.md` | ngram・MIT | bash、codex CLI |
+| `plan-review` | `SKILL.md` | ngram・MIT | bash、codex CLIかclaude CLI |
 
 `japanese-tech-writing`は、gist（`fd287c3133457c4fd8f5601d34aa817d`）のコミット`8f2d576`の内容に、日本語と英数字の間の空白の節とスクリプトを足したものである（「各Skillに加えた変更」の節）。
 zipに入っていたこのgistのクローン（`.git`）は収録していない。
@@ -31,7 +31,7 @@ zipに入っていたこのgistのクローン（`.git`）は収録していな�
 | 経路 | 利用者の操作 | リポジトリ側に要るもの |
 |---|---|---|
 | Claude Code・Claude Desktop（プラグイン） | `/plugin marketplace add ngram/skills`のあと`/plugin install <name>@ngram-skills` | `.claude-plugin/marketplace.json` |
-| claude.ai（Cowork・クラウドセッション） | リリースに添付した`<name>.skill`を、セッションのファイルのカードの「Save skill」か、claude.aiのCustomize > Skillsのアップロードで入れる（`plan-review`はサポート外） | リリースへの`.skill`の添付（`release.yml`、`release-assets.yml`） |
+| claude.ai（Cowork・クラウドセッション） | リリースに添付した`<name>.skill`を、セッションのファイルのカードの「Save skill」か、claude.aiのCustomize > Skillsのアップロードで入れる | リリースへの`.skill`の添付（`release.yml`、`release-assets.yml`） |
 | GitHub CLI（gh 2.90以降） | `gh skill install ngram/skills <name> --agent claude-code --scope user` | `<name>/SKILL.md`。検索には`agent-skills`トピック、版の固定にはGitHub Release |
 | APM（Microsoft Agent Package Manager） | `apm install -g ngram/skills/<name>` | `<name>/SKILL.md` |
 | skills CLI（`npx skills`） | `npx skills add ngram/skills --skill <name>` | `<name>/SKILL.md` |
@@ -135,9 +135,16 @@ ZIPは添付しない。理由は次のとおり。
 
 ### plan-review
 
-- frontmatterへの`compatibility: Claude Code向け（引数の置換とdisable-model-invocationを使う）。bashとcodex CLIが必要`の追加
+- frontmatterへの`compatibility`の追加（Claude Code向けで、引数の置換と`disable-model-invocation`を使い、bashと、codex CLIかclaude CLIが要る）
 - 説明文の「ユーザーが /plan-review と明示的に指示したときだけ使う」は残した。`disable-model-invocation`を解さないホストでも、自動で呼ばれにくくなる
-- claude.aiのサポート外とし、frontmatterの`metadata`に`claude-ai: unsupported`を書いた。手元のcodex CLIを前提にするので、claude.aiのチャット、Cowork、クラウドセッションでは動かない。あわせて`compatibility`に「claude.aiはサポート外」を書き足した
+- レビューする側を、Codex（`codex exec -s read-only`）とClaude（`claude -p --tools "Read,Grep,Glob" --restricted --strict-mcp-config --no-session-persistence`）から選べるようにした。選ぶ順は、引数`--reviewer`、環境変数`PLAN_REVIEW_REVIEWER`、既定の`auto`（`codex`にログイン済みならCodex、そうでなければClaude）。Codexの無いクラウドセッションでも使うためで、Claudeも、Planを書いたセッションとは文脈を共有しない別のプロセスでレビューする
+  - Claudeには、読むツール（Read、Grep、Glob）だけを渡す。Codexの`-s read-only`と同じく、Planの記述をリポジトリと照らし合わせられる。ツールを1つも渡さない（`--tools ""`）と、モデルがツールを呼ぼうとしたときに終了コード1で失敗することがあった
+  - `--tools`が絞るのは組み込みのツールだけなので、`--restricted`（利用者とプロジェクトの設定ファイルを読まず、ファイルのツールを作業ディレクトリの中に限る）と`--strict-mcp-config`（MCPサーバーを読み込まない）も付ける。Claude Code 2.1.302で、リポジトリの中のファイルは読めて、外のファイルは拒否されることを確かめた
+  - 応答は一時ファイルに書き、0で終わり空でないときだけ`rNN_review.md`にする。0以外で終わったときは、応答をレビュー結果として扱わず、実行ログに移す。`claude -p`はエラーの文も標準出力に書き、途中で止まると途中までの応答が残るため
+  - 履歴のファイル名を`rNN_review.md`と`rNN_review.log`にした。前の回の応答は、応答の無い回を飛ばしてさかのぼって探し、前の版の`rNN_codex.md`も読む
+  - `--reviewer codex`で明示したときは、`codex login status`が失敗しても中断せず、注意を出す。環境変数のAPIキーだけでCodexを使っているときに、ログインの確かめだけが失敗することがあるため
+  - モデルと推論の強さの環境変数を、`PLAN_REVIEW_CODEX_*`と`PLAN_REVIEW_CLAUDE_*`に分けた。前の版の`PLAN_REVIEW_MODEL`と`PLAN_REVIEW_EFFORT`は読まない。Claudeの既定は`opus`と`high`
+- 前の版ではclaude.aiのサポート外（`metadata`の`claude-ai: unsupported`）だったが、その印を外した。claude.aiに入れると、クラウドセッションに同期され、`/anthropic-skills:plan-review`で呼べる。claude.aiのチャットでは、Bashと`codex`・`claude`のコマンドが無いので動かない（`compatibility`に書いた）
 
 ### japanese-tech-writing
 
@@ -171,7 +178,7 @@ ZIPは添付しない。理由は次のとおり。
 - `.skill`は`scripts/package-skills.mjs`が`git archive`（ZIPの形式）で作るので、gitが管理しているファイルだけが入り、ルートにSkillのディレクトリが1つ置かれる（claude.aiはこの形を求める）。ファイル名を`<name>.skill`に固定したので、`https://github.com/ngram/skills/releases/latest/download/<name>.skill`が常に最新版を指す
 - frontmatterの`metadata`に`claude-ai: unsupported`があるSkillは、claude.aiのサポート外として`.skill`を作らない。`sync-skills.mjs`も同じ印を見て、そのSkillのREADMEのclaude.aiの節をサポート外の案内にする。印をSkillのfrontmatterに置くのは、二つのスクリプトが同じところから判断でき、Skillを移しても印が一緒に移るためである。`metadata`はAgent Skillsの仕様が独自の情報のために用意した項目なので、ほかのツールの検証にもかからない
 - `package-skills.mjs`は、claude.aiのサポート外ではないSkillのfrontmatterに、skill-creatorの検証（`quick_validate.py`）が許していないキーがあると警告する。許すのは`name`、`description`、`license`、`allowed-tools`、`metadata`、`compatibility`の6つで、ほかのキーがあるとclaude.aiへのアップロードで拒否されることがある。GitHub Actionsの中では、警告を実行結果の注釈として出す
-  - `plan-review`は、Claude Code向けの`argument-hint`と`disable-model-invocation`を持つが、claude.aiのサポート外として作らないので警告も出ない
+  - Claude Code向けの`argument-hint`と`disable-model-invocation`は、警告の対象から外した。`quick_validate.py`は許さないが、この2つを持つ`plan-review`の`.skill`をclaude.aiに保存でき、クラウドセッションに同期された写しにも残ることを確かめた
 - `gh skill publish`などでリリースを公開すると、`.github/workflows/release-assets.yml`がタグの内容から`.skill`を作って添付する。作るためのスクリプトは既定のブランチの最新のものを使うので、古いタグのリリースにも、workflow_dispatchでタグを指定して実行すれば今の形式のファイルを後から添付できる。不変リリースを有効にしていると公開後には添付できないので、その場合はタグをpushして下書きのリリースを作り、`release-assets`をworkflow_dispatchでタグを指定して実行してから公開する
 
 ## claude.aiへの反映

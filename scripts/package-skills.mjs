@@ -9,8 +9,8 @@
 // release.yml と release-assets.yml が、このスクリプトで作ったファイルをリリースに添付する。
 //
 // frontmatter の metadata に claude-ai: unsupported がある Skill は、claude.ai のサポート外として作らない。
-// それ以外の Skill の frontmatter に、skill-creator の検証（アップロードする .skill 向け）が許すキー以外があれば警告する。
-// claude.ai へのアップロードで拒否されることがあるため。警告だけで、ファイルは作る。
+// それ以外の Skill の frontmatter に、skill-creator の検証（アップロードする .skill 向け）が許すキーと、claude.ai に
+// 保存できると確かめたキー以外があれば警告する。claude.ai へのアップロードで拒否されることがあるため。警告だけで、ファイルは作る。
 //
 // 使い方:
 //   node scripts/package-skills.mjs [--ref <コミットやタグ>] [--out <ディレクトリ>]
@@ -24,8 +24,12 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const USAGE = "使い方: node scripts/package-skills.mjs [--ref <コミットやタグ>] [--out <ディレクトリ>]";
-// skill-creator の quick_validate.py が許す frontmatter のキー。
-const UPLOAD_KEYS = new Set(["name", "description", "license", "allowed-tools", "metadata", "compatibility"]);
+// skill-creator の quick_validate.py が許す frontmatter のキーと、quick_validate.py は許さないが、claude.ai に保存でき、
+// クラウドセッションに同期された写しにも残ると確かめたキー（argument-hint と disable-model-invocation。plan-review で確かめた）。
+const UPLOAD_KEYS = new Set([
+  "name", "description", "license", "allowed-tools", "metadata", "compatibility",
+  "argument-hint", "disable-model-invocation",
+]);
 
 function git(args) {
   const r = spawnSync("git", args, { cwd: ROOT, encoding: "utf8" });

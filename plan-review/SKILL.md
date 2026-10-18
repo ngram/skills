@@ -1,25 +1,24 @@
 ---
 name: plan-review
-description: Codexによる、plan/配下のPlanファイルのレビュー。履歴をplan/.reviews/に残し、差分を表示する。Planの「保証の水準」をCodexに渡して指摘を重大度で分けさせ、「重大」の指摘が無くなった時点で終える。ユーザーが/plan-reviewと明示的に指示したときだけ使う。
-argument-hint: "[plan-file-name]"
+description: CodexかClaudeによる、plan/配下のPlanファイルのレビュー。レビューする側は引数か環境変数で選び、既定ではcodexにログイン済みならCodex、そうでなければClaude（claude -p）を使う。履歴をplan/.reviews/に残し、差分を表示する。Planの「保証の水準」をレビューする側に渡して指摘を重大度で分けさせ、「重大」の指摘が無くなった時点で終える。ユーザーが/plan-reviewと明示的に指示したときだけ使う。
+argument-hint: "[--reviewer codex|claude|auto] [plan-file-name]"
 disable-model-invocation: true
-compatibility: Claude Code向け（引数の置換とdisable-model-invocationを使う）。手元のbashとcodex CLIが必要で、claude.aiはサポート外
+compatibility: Claude Code（手元とクラウドセッション）向け（引数の置換とdisable-model-invocationを使う）。bashと、codex CLIかclaude CLIが必要。claude.aiのチャットは対象外
 license: MIT
-metadata:
-  claude-ai: unsupported
 ---
 
-# /plan-review：PlanをCodexでレビューし、差分を表示する
+# /plan-review：PlanをCodexかClaudeでレビューし、差分を表示する
 
 ## 概要
 
-`plan/`にあるPlanファイルを、Codexにレビューさせる。
+`plan/`にあるPlanファイルを、CodexかClaudeにレビューさせる。どちらにさせるかは、引数か環境変数で選ぶ（「レビューする側とモデルの選び方」）。
+レビューする側は、このセッションとは文脈を共有しない別のプロセスで動き、Planとリポジトリのファイルを読むだけで、ファイルを変えない。
 レビューはPlanの「保証の水準」を前提に行い、「重大」の指摘が無くなった時点で終える。
 
 レビューの履歴は、`plan/.reviews/<ファイル名>/`に`r01_*`、`r02_*`の形で回ごとに残る。
 同じPlanを何度レビューしても、前の回の履歴は上書きされない。
 
-VS Codeの`code`コマンドが使える環境では、レビュー結果（`rNN_codex.md`）と、最初のPlan（`r01_before.md`）と最後のPlanの差分を、エディタで開く。
+VS Codeの`code`コマンドが使える環境では、レビュー結果（`rNN_review.md`）と、最初のPlan（`r01_before.md`）と最後のPlanの差分を、エディタで開く。
 `code`コマンドが無い環境では開かずに進む。
 
 ## Planに必要な節
@@ -28,7 +27,7 @@ VS Codeの`code`コマンドが使える環境では、レビュー結果（`rNN
 
 レビューの前に、Planに`## 保証の水準`の節があるかを確かめる（ステップ2a）。
 無ければ、ClaudeがPlanの目的と背景から下書きを作り、ユーザーの確認を得てからPlanに加え、そのあとでレビューを始める。
-この節が無いと、Codexは考えうるすべての穴を指摘し、レビューが終わらなくなる。
+この節が無いと、レビューする側は考えうるすべての穴を指摘し、レビューが終わらなくなる。
 
 節には次の4点を書く。
 
@@ -39,7 +38,7 @@ VS Codeの`code`コマンドが使える環境では、レビュー結果（`rNN
 
 次の項目は、当てはまるときだけ書く。
 
-- 同時に使う人・LLM：複数の人やLLMが、同じPlanやデータを同時に読み書きする場合に、その形を書く。書かなければ、1人が1つのセッションで使うものとして扱う。Codexにもステップ4のプロンプトでそう伝える
+- 同時に使う人・LLM：複数の人やLLMが、同じPlanやデータを同時に読み書きする場合に、その形を書く。書かなければ、1人が1つのセッションで使うものとして扱う。レビューする側にもステップ4のプロンプトでそう伝える
 
 ### 実装時に決める事項（任意）
 
@@ -54,17 +53,21 @@ plan/
 └── .reviews/
     └── 20250621_my-feature/
         ├── r01_before.md           ← 1回目のレビューを始めた時点のスナップショット
-        ├── r01_codex.md            ← 1回目のCodexの応答（最後の応答だけ）
-        ├── r01_codex.log           ← 1回目のCodexの実行ログ（見出し・プロンプト・応答）
+        ├── r01_review.md           ← 1回目のレビューする側の応答（最後の応答だけ）
+        ├── r01_review.log          ← 1回目の実行ログ（レビューする側とモデル、エラーの出力）
         ├── r01_triage.md           ← 1回目の指摘の仕分け（REVISEのときだけ）
         ├── r02_before.md           ← 2回目のレビューを始めた時点のスナップショット
-        ├── r02_codex.md            ← 2回目のCodexの応答
-        └── r02_codex.log           ← 2回目のCodexの実行ログ
+        ├── r02_review.md           ← 2回目のレビューする側の応答
+        └── r02_review.log          ← 2回目の実行ログ
 ```
+
+前の版の`plan-review`で作った履歴（`rNN_codex.md`、`rNN_codex.log`）は、そのまま残す。前の回の応答として、`rNN_codex.md`も読む（ステップ4）。
 
 ## 手順
 
-### ステップ1：対象のファイルを決める
+コードブロックごとに別のシェルで動く環境では、前のコードブロックで決まった値（`REVIEWER`、`PLAN_FILE`、`REVIEW_DIR`、`ROUND`など）を、次のコードブロックの先頭で設定し直してから実行する。
+
+### ステップ1：レビューする側と対象のファイルを決める
 
 まず、`plan/`ディレクトリがあるかを確かめる。無ければ、その旨を伝えて中断する。
 
@@ -75,7 +78,85 @@ if [ ! -d "plan" ]; then
 fi
 ```
 
-`$ARGUMENTS`が渡されていれば、それをファイル名として扱う（拡張子の`.md`は省略できる）。
+次に、レビューする側を決める。引数（`$ARGUMENTS`）から`--reviewer`の値を取り出し、残りをPlanのファイル名（`PLAN_ARG`）にする。
+値は、引数、環境変数`PLAN_REVIEW_REVIEWER`、既定の`auto`の順に決める。`auto`は、`codex`が`PATH`にあってログイン済みならCodex、そうでなければClaudeにする。
+
+```bash
+# レビューする側を決める
+ARGS="$ARGUMENTS"
+REVIEWER_ARG=""
+PLAN_ARG=""
+set -f
+set -- $ARGS
+set +f
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --reviewer=*) REVIEWER_ARG="${1#--reviewer=}"; shift ;;
+    --reviewer)
+      if [ $# -lt 2 ]; then
+        echo "エラー: --reviewerの後に、codex、claude、autoのどれかを書いてください。"
+        exit 1
+      fi
+      REVIEWER_ARG="$2"; shift 2 ;;
+    *) PLAN_ARG="$1"; shift ;;
+  esac
+done
+
+if [ -n "$REVIEWER_ARG" ]; then
+  REVIEWER="$REVIEWER_ARG"; HOW="引数"
+elif [ -n "${PLAN_REVIEW_REVIEWER:-}" ]; then
+  REVIEWER="$PLAN_REVIEW_REVIEWER"; HOW="環境変数PLAN_REVIEW_REVIEWER"
+else
+  REVIEWER="auto"; HOW="既定"
+fi
+case "$REVIEWER" in
+  codex|claude|auto) ;;
+  *)
+    echo "エラー: レビューする側「${REVIEWER}」（${HOW}）は使えません。codex、claude、autoのどれかにしてください。"
+    exit 1 ;;
+esac
+
+if [ "$REVIEWER" = "auto" ]; then
+  if ! command -v codex >/dev/null 2>&1; then
+    REVIEWER="claude"; HOW="${HOW}のauto（codexが無い）"
+  elif ! codex login status >/dev/null 2>&1; then
+    REVIEWER="claude"; HOW="${HOW}のauto（codexにログインしていない）"
+  else
+    REVIEWER="codex"; HOW="${HOW}のauto（codexにログイン済み）"
+  fi
+fi
+
+if ! command -v "$REVIEWER" >/dev/null 2>&1; then
+  echo "エラー: ${REVIEWER}コマンドが見つかりません（${HOW}で選びました）。"
+  exit 1
+fi
+# 明示してCodexを選んだときは、ログインの確かめに失敗しても中断しない。
+# 環境変数のAPIキーだけで使っているときなど、codex login statusが失敗してもcodex execは動くことがあるため。
+if [ "$REVIEWER" = "codex" ] && ! codex login status >/dev/null 2>&1; then
+  echo "注意: codex login statusが失敗しました。ログインしていなければ、ステップ4でcodexが失敗します（${HOW}で選びました）。"
+fi
+
+# 前の版の環境変数は読まない。設定されていれば、新しい名前を示す。
+for OLD in PLAN_REVIEW_MODEL PLAN_REVIEW_EFFORT; do
+  if [ -n "${!OLD:-}" ]; then
+    echo "注意: ${OLD}は読みません。PLAN_REVIEW_CODEX_${OLD#PLAN_REVIEW_}かPLAN_REVIEW_CLAUDE_${OLD#PLAN_REVIEW_}を使ってください。"
+  fi
+done
+
+echo "レビューする側: ${REVIEWER}（${HOW}）"
+echo "Planの指定    : ${PLAN_ARG:-（なし）}"
+```
+
+エラーで中断したときは、その理由をユーザーに伝える。`codex`が無いときと、Codexにログインしていないことでステップ4が失敗したときは、次のことも伝える。
+
+- 手元では、`npm install -g @openai/codex`で入れ、`codex login`でログインする
+- クラウドセッションでは、環境の設定（Setup script、Network secrets、Network access）が要る。手順はこのSkillの`README.md`の「クラウドセッションでCodexを使う」にある
+- `--reviewer claude`を付ければ、Claudeでレビューできる
+- `auto`は`codex login status`でログインを確かめる。環境変数のAPIキーだけでCodexを使っていて、`auto`がClaudeを選ぶときは、`--reviewer codex`か`PLAN_REVIEW_REVIEWER=codex`で明示する
+
+決まった`REVIEWER`は、ステップ4で使う。
+
+`PLAN_ARG`が渡されていれば、それをファイル名として扱う（先頭の`plan/`と拡張子の`.md`は省略できる）。
 渡されていなければ、`plan/`にある`YYYYMMDD_*.md`のうち、更新日時が最も新しい1件を選ぶ。
 候補が複数あるときは、選んだファイル名をユーザーに伝えてから進む。
 
@@ -83,8 +164,6 @@ fi
 # 引数が無い場合
 PLAN_FILE=$(ls -t plan/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_*.md 2>/dev/null | head -1)
 ```
-
-`codex`コマンドが`PATH`に無ければ、その旨をユーザーに伝えて中断する。
 
 ### ステップ2：レビューの回の番号を決め、ディレクトリを用意する
 
@@ -105,7 +184,7 @@ echo "今回の回: r${ROUND}"
 
 ### ステップ2a：「保証の水準」の節を確かめる
 
-スナップショット（ステップ3）より前に行う。あとで節を足すと、保存したPlanとCodexに送るPlanが食い違う。
+スナップショット（ステップ3）より前に行う。あとで節を足すと、保存したPlanとレビューする側に送るPlanが食い違う。
 
 ```bash
 if grep -q '^## 保証の水準' "$PLAN_FILE"; then
@@ -115,14 +194,14 @@ else
 fi
 ```
 
-節が無ければ、Codexを呼ぶ前に次のことを行う。
+節が無ければ、レビューする側を呼ぶ前に次のことを行う。
 
 1. Planの目的と背景から、「Planに必要な節」の4点で下書きを作る。Planに書かれていない保証は足さない。水準を高く見積もりすぎると、レビューが終わらなくなる
 2. 「同時に使う人・LLM」は、Planから同時に使うことが読み取れるときだけ書く
 3. 下書きをユーザーに見せ、確認を得る。直すよう頼まれたら、直してもう一度見せる
 4. 確認を得たら、Planの「目的・背景」の節の後（その節が無ければ、先頭の見出しの後）に`## 保証の水準`として加える
 
-ユーザーが下書きを却下したら、レビューを始めずに中断する。節が無いままでは、Codexに水準を渡せない。
+ユーザーが下書きを却下したら、レビューを始めずに中断する。節が無いままでは、レビューする側に水準を渡せない。
 
 ### ステップ3：レビュー前のスナップショットを保存する
 
@@ -132,26 +211,47 @@ cp "$PLAN_FILE" "$BEFORE"
 echo "スナップショットを保存: $BEFORE"
 ```
 
-### ステップ4：Codexでレビューする
+### ステップ4：レビューする側にレビューさせる
 
-2回目以降は、前の回の`rNN_codex.md`があればプロンプトに添付する。
-Codexには、前回の指摘が解消したかと、前回の修正で足した仕組みが本当に必要かも確かめさせる。
+2回目以降は、前の回の応答（`rNN_review.md`、前の版の履歴では`rNN_codex.md`）があればプロンプトに添付する。
+レビューする側には、前回の指摘が解消したかと、前回の修正で足した仕組みが本当に必要かも確かめさせる。
+
+レビューには数分かかることがある。このコードブロックは、Bashツールの制限時間を600000ミリ秒（10分）にして実行する。10分を超えそうなときは、裏で実行して終わるのを待つ。
 
 ```bash
-CODEX_OUT="${REVIEW_DIR}/r${ROUND}_codex.md"
-CODEX_LOG="${REVIEW_DIR}/r${ROUND}_codex.log"
-PREV_OUT="${REVIEW_DIR}/r$(printf "%02d" $((10#$ROUND - 1)))_codex.md"
+# レビューする側にレビューさせる
+REVIEW_OUT="${REVIEW_DIR}/r${ROUND}_review.md"
+REVIEW_LOG="${REVIEW_DIR}/r${ROUND}_review.log"
+# 応答はいったん一時ファイルに書き、成功したときだけrNN_review.mdにする。
+# 途中で止まったときに、途中までの応答がrNN_review.mdとして残り、次の回に添付されないようにするため。
+REVIEW_TMP="${REVIEW_OUT}.tmp"
+
+# 前の回の応答を探す。失敗した回（応答の無い回）は飛ばしてさかのぼる。
+# 前の版のplan-reviewで作った履歴（rNN_codex.md）からも続けられるようにする。
+PREV_OUT=""
+N=$((10#$ROUND - 1))
+while [ "$N" -ge 1 ] && [ -z "$PREV_OUT" ]; do
+  P=$(printf "%02d" "$N")
+  for F in "${REVIEW_DIR}/r${P}_review.md" "${REVIEW_DIR}/r${P}_codex.md"; do
+    if [ -f "$F" ]; then
+      PREV_OUT="$F"
+      break
+    fi
+  done
+  N=$((N - 1))
+done
 
 # プロンプトは引数ではなく、一時ファイルを通して標準入力で渡す。
 # 引数で渡すと、長いPlanでWindowsのコマンドラインの長さの上限を超える。
 PROMPT_FILE="$(mktemp)" || exit 1
-trap 'rm -f "$PROMPT_FILE"' EXIT
+trap 'rm -f "$PROMPT_FILE" "$REVIEW_TMP"' EXIT
 
 # 区切りを'EOF'と引用符で囲み、文面の$やバッククォートを展開させない。
 {
 cat <<'EOF'
 あなたはソフトウェア設計のレビュアーです。
 以下のPlanを読み、技術的な問題点・曖昧さ・抜け漏れを指摘してください。
+リポジトリのファイルは読めますが、変更はできません。Planの記述は、必要に応じてリポジトリと照らし合わせてください。
 
 【最初に読むこと】
 Planの「保証の水準」の節に、この計画が守るものと守らないものが書いてあります。
@@ -215,47 +315,94 @@ VERDICT: REVISE     （「重大」の指摘がある）
 EOF
 } > "$PROMPT_FILE"
 
-# モデルと推論の強さは、環境変数で指定されたときだけ渡す。無ければCodex CLIの既定値を使う。
+# モデルと推論の強さは、レビューする側ごとの環境変数で指定する。
+# Codexは、指定されたときだけ渡し、無ければCodex CLIの既定値を使う。Claudeの既定はopusとhigh。
 # 値が空のときに空の引数を渡さないよう、引数を配列に積む。
-CODEX_ARGS=(exec -s read-only)
-if [ -n "${PLAN_REVIEW_MODEL:-}" ]; then
-  CODEX_ARGS+=(-m "$PLAN_REVIEW_MODEL")
-fi
-if [ -n "${PLAN_REVIEW_EFFORT:-}" ]; then
-  CODEX_ARGS+=(-c "model_reasoning_effort=$PLAN_REVIEW_EFFORT")
+if [ "$REVIEWER" = "codex" ]; then
+  MODEL="${PLAN_REVIEW_CODEX_MODEL:-}"
+  EFFORT="${PLAN_REVIEW_CODEX_EFFORT:-}"
+  REVIEW_ARGS=(exec -s read-only)
+  if [ -n "$MODEL" ]; then
+    REVIEW_ARGS+=(-m "$MODEL")
+  fi
+  if [ -n "$EFFORT" ]; then
+    REVIEW_ARGS+=(-c "model_reasoning_effort=$EFFORT")
+  fi
+else
+  MODEL="${PLAN_REVIEW_CLAUDE_MODEL:-opus}"
+  EFFORT="${PLAN_REVIEW_CLAUDE_EFFORT:-high}"
+  # ツールは読むものだけを渡す。--restrictedは、利用者とプロジェクトの設定ファイル（hooksや許可の設定）を読まず、
+  # ファイルのツールを作業ディレクトリの中に限る。--strict-mcp-configは、MCPサーバーを読み込まない。
+  REVIEW_ARGS=(-p --model "$MODEL" --effort "$EFFORT" --tools "Read,Grep,Glob" --restricted --strict-mcp-config --no-session-persistence)
 fi
 
-# 最後の応答だけを-oでrNN_codex.mdに書き、見出しとプロンプトを含む実行ログはrNN_codex.logに書く。
-# rNN_codex.mdは次の回のプロンプトに添付するので、実行ログを混ぜない。
-codex "${CODEX_ARGS[@]}" -o "$CODEX_OUT" - < "$PROMPT_FILE" > "$CODEX_LOG" 2>&1
-CODEX_STATUS=$?
+# 実行ログの先頭に、レビューする側と指定したモデルを書く。
+{
+  echo "plan-review reviewer: ${REVIEWER}"
+  echo "plan-review model: ${MODEL:-（CLIの既定）}"
+  echo "plan-review effort: ${EFFORT:-（CLIの既定）}"
+  echo "----"
+} > "$REVIEW_LOG"
 
-echo "=== Codexのレビュー結果（r${ROUND}） ==="
-if [ -f "$CODEX_OUT" ]; then
-  cat "$CODEX_OUT"
+# 最後の応答だけを一時ファイルに書き、見出しやエラーの出力はrNN_review.logに書く。
+# 応答は次の回のプロンプトに添付するので、実行ログを混ぜない。
+rm -f "$REVIEW_TMP"
+if [ "$REVIEWER" = "codex" ]; then
+  codex "${REVIEW_ARGS[@]}" -o "$REVIEW_TMP" - < "$PROMPT_FILE" >> "$REVIEW_LOG" 2>&1
+else
+  claude "${REVIEW_ARGS[@]}" < "$PROMPT_FILE" > "$REVIEW_TMP" 2>> "$REVIEW_LOG"
+fi
+REVIEW_STATUS=$?
+
+# 0で終わり、応答が空でなければ、rNN_review.mdにする。そうでなければ、出力をレビュー結果として扱わない。
+# claudeはエラーの文も標準出力に書くので、一時ファイルの中身を実行ログに移して消す。
+# このときrNN_review.mdは作られず、ステップ5の判定はUNKNOWNになり、次の回にも添付されない。
+if [ "$REVIEW_STATUS" -eq 0 ] && [ -s "$REVIEW_TMP" ]; then
+  mv "$REVIEW_TMP" "$REVIEW_OUT"
+elif [ -f "$REVIEW_TMP" ]; then
+  {
+    echo "---- 応答（終了コード${REVIEW_STATUS}。0以外で終わったか、応答が空のため、レビュー結果として扱わない）"
+    cat "$REVIEW_TMP"
+  } >> "$REVIEW_LOG"
+  rm -f "$REVIEW_TMP"
+fi
+
+echo "=== レビュー結果（r${ROUND}、${REVIEWER}） ==="
+if [ -f "$REVIEW_OUT" ]; then
+  cat "$REVIEW_OUT"
 else
   echo "（応答がありません。実行ログの末尾を示します）"
-  tail -n 20 "$CODEX_LOG"
+  tail -n 20 "$REVIEW_LOG"
 fi
 
-# 使ったモデルと推論の強さは、codexが標準エラー出力に書く見出しから取り出す。
 echo "=== 使ったモデル ==="
-grep -m 2 -E '^(model|reasoning effort): ' "$CODEX_LOG" || echo "（見出しにモデルの行がありません）"
+if [ "$REVIEWER" = "codex" ]; then
+  # 実際に使ったモデルと推論の強さは、codexが標準エラー出力に書く見出しから取り出す。
+  grep -m 2 -E '^(model|reasoning effort): ' "$REVIEW_LOG" || echo "（見出しにモデルの行がありません）"
+else
+  echo "model: ${MODEL}"
+  echo "effort: ${EFFORT}"
+fi
 
 # 失敗したときは、環境変数が原因かどうかを見分けられるよう、値を示す。
-if [ "$CODEX_STATUS" -ne 0 ]; then
-  echo "=== codexが終了コード${CODEX_STATUS}で終わりました（ログ: ${CODEX_LOG}） ==="
-  echo "PLAN_REVIEW_MODEL : ${PLAN_REVIEW_MODEL:-（未設定）}"
-  echo "PLAN_REVIEW_EFFORT: ${PLAN_REVIEW_EFFORT:-（未設定）}"
+if [ "$REVIEW_STATUS" -ne 0 ]; then
+  echo "=== ${REVIEWER}が終了コード${REVIEW_STATUS}で終わりました（ログ: ${REVIEW_LOG}） ==="
+  if [ "$REVIEWER" = "codex" ]; then
+    echo "PLAN_REVIEW_CODEX_MODEL : ${PLAN_REVIEW_CODEX_MODEL:-（未設定）}"
+    echo "PLAN_REVIEW_CODEX_EFFORT: ${PLAN_REVIEW_CODEX_EFFORT:-（未設定）}"
+  else
+    echo "PLAN_REVIEW_CLAUDE_MODEL : ${PLAN_REVIEW_CLAUDE_MODEL:-（未設定。opusを使った）}"
+    echo "PLAN_REVIEW_CLAUDE_EFFORT: ${PLAN_REVIEW_CLAUDE_EFFORT:-（未設定。highを使った）}"
+  fi
 fi
 
 # レビュー結果をエディタで開く（VS Codeのcodeコマンドがある場合だけ）。
-if [ -f "$CODEX_OUT" ] && command -v code >/dev/null 2>&1; then
-  code -r "$CODEX_OUT" 2>/dev/null || true
+if [ -f "$REVIEW_OUT" ] && command -v code >/dev/null 2>&1; then
+  code -r "$REVIEW_OUT" 2>/dev/null || true
 fi
 ```
 
-`codex`が0以外で終わったときは、示した実行ログの末尾をもとに、どうするかをユーザーに委ねる。
+レビューする側が0以外で終わったときは、示した実行ログの末尾をもとに、どうするかをユーザーに委ねる。利用上限、使えないモデル、認証の失敗、ネットワークの拒否などが、ログの末尾に出る。
 
 ### ステップ5：VERDICTを確かめる
 
@@ -264,8 +411,8 @@ fi
 
 ```bash
 VERDICT_LINE=""
-if [ -f "$CODEX_OUT" ]; then
-  VERDICT_LINE=$(tr -d '\r' < "$CODEX_OUT" | grep '^VERDICT:' | tail -1)
+if [ -f "$REVIEW_OUT" ]; then
+  VERDICT_LINE=$(tr -d '\r' < "$REVIEW_OUT" | grep '^VERDICT:' | tail -1)
 fi
 VERDICT=UNKNOWN
 if [[ $VERDICT_LINE =~ ^VERDICT:\ (APPROVED|REVISE)([[:space:]]|$) ]]; then
@@ -277,8 +424,8 @@ echo "判定: ${VERDICT}（${VERDICT_LINE:-VERDICTの行がありません}）"
 次の条件を上から順に当てはめ、最初に当たったものに従う。
 
 1. **APPROVED**（「重大」の指摘が無い）：ステップ6へ進む。「中」や「軽微」の指摘が残っていても、レビューは終える
-2. **UNKNOWN**（`rNN_codex.md`が無い、`VERDICT:`の行が無い、またはAPPROVEDとREVISEのどちらでもない）：ユーザーに確認を求める
-3. **REVISE**で、今回が3回目以降：残った指摘と、これまでの`rNN_triage.md`の表をユーザーに見せ、判断を委ねる。続けると言われなければ、ステップ6へ進む
+2. **UNKNOWN**（`rNN_review.md`が無い、`VERDICT:`の行が無い、またはAPPROVEDとREVISEのどちらでもない。レビューする側が0以外で終わったときは、`rNN_review.md`が無い）：ユーザーに確認を求める
+3. **REVISE**で、応答のあった回（`rNN_review.md`か`rNN_codex.md`がある回）が今回で3回目以降：残った指摘と、これまでの`rNN_triage.md`の表をユーザーに見せ、判断を委ねる。続けると言われなければ、ステップ6へ進む
 4. **REVISE**で、収束していない兆候がある：保証の水準の見直しをユーザーに提案し、ステップ6へ進む。兆候とは、次の2つがどちらも当てはまることを言う。前回の`rNN_triage.md`が無ければ、この条件は当てはめない
    - 今回の「重大」の指摘が、どれも前回の修正で足した仕組み（前回の`rNN_triage.md`の「足した仕組み」）の細部に関するものである。これは、Claudeがここで今回の応答と前回の`rNN_triage.md`を見比べて判断する。ステップ5aの仕分けは待たない
    - 前回の`rNN_triage.md`の集計で、「「重大」の指摘が、どれも直前の修正で足した仕組みの細部か」が「はい」である
@@ -350,15 +497,19 @@ echo ""
 echo "=== レビュー完了 ==="
 echo "Planファイル    : $PLAN_FILE"
 echo "スナップショット: $BEFORE"
-echo "Codexの応答     : $CODEX_OUT"
-echo "Codexのログ     : $CODEX_LOG"
+echo "レビューする側  : $REVIEWER"
+echo "応答            : $REVIEW_OUT"
+echo "実行ログ        : $REVIEW_LOG"
 echo "履歴ディレクトリ: $REVIEW_DIR"
-grep -m 2 -E '^(model|reasoning effort): ' "$CODEX_LOG" | sed 's/^/Codex /'
+grep -m 3 -E '^plan-review (model|effort): ' "$REVIEW_LOG" | sed 's/^plan-review /指定した /'
+if [ "$REVIEWER" = "codex" ]; then
+  grep -m 2 -E '^(model|reasoning effort): ' "$REVIEW_LOG" | sed 's/^/Codexが使った /'
+fi
 
 # 最後の回のレビュー結果と、最初のPlan（r01_before.md）と今のPlanの差分を、
 # エディタで開く（VS Codeのcodeコマンドがある場合だけ）。
 if command -v code >/dev/null 2>&1; then
-  code -r "$CODEX_OUT" 2>/dev/null || true
+  code -r "$REVIEW_OUT" 2>/dev/null || true
   FIRST="${REVIEW_DIR}/r01_before.md"
   if [ -f "$FIRST" ]; then
     code --diff "$FIRST" "$PLAN_FILE" 2>/dev/null || true
@@ -379,33 +530,48 @@ Planを変えなかった場合（1回目でAPPROVEDだった場合）は、そ�
 # ファイル名を指定してレビューする
 /plan-review 20250621_my-feature
 /plan-review plan/20250621_my-feature.md
+
+# レビューする側を指定する
+/plan-review --reviewer claude 20250621_my-feature
+/plan-review --reviewer codex
 ```
 
-## Codexのモデルと推論の強さ
+claude.aiに入れてクラウドセッションで使うときは、`/anthropic-skills:plan-review`の名前で呼ぶ。Claude Codeのプラグインとして入れたときは、`/plan-review:plan-review`になる。
 
-既定では、モデルも推論の強さも指定せずに`codex exec`を実行する。どちらもCodex CLIの既定値になるので、CLIを更新すると変わることがある。実際に使った値は、レビューのたびに「使ったモデル」として表示され、`rNN_codex.log`の見出し（`model:`と`reasoning effort:`の行）にも残る。
+## レビューする側とモデルの選び方
 
-レビューに使う値を決めたいときは、次の環境変数を設定する。空の値は、設定しないのと同じに扱う。
+レビューする側は、引数`--reviewer`、環境変数`PLAN_REVIEW_REVIEWER`、既定の`auto`の順に決まる（ステップ1）。
+`auto`は、`codex`が`PATH`にあって`codex login status`が成功すればCodex、そうでなければClaudeを選ぶ。Codexが入っていないクラウドセッションでは、Claudeになる。
 
-| 環境変数 | Codexへの渡し方 | 設定しないとき |
+モデルと推論の強さは、レビューする側ごとの環境変数で指定する。空の値は、設定しないのと同じに扱う。
+
+| 環境変数 | 渡し方 | 設定しないとき |
 |---|---|---|
-| `PLAN_REVIEW_MODEL` | `-m <値>` | CLIの既定のモデル |
-| `PLAN_REVIEW_EFFORT` | `-c model_reasoning_effort=<値>` | CLIの既定の推論の強さ |
+| `PLAN_REVIEW_REVIEWER` | `codex`、`claude`、`auto`のどれか | `auto` |
+| `PLAN_REVIEW_CODEX_MODEL` | `codex exec -m <値>` | Codex CLIの既定のモデル |
+| `PLAN_REVIEW_CODEX_EFFORT` | `codex exec -c model_reasoning_effort=<値>` | Codex CLIの既定の推論の強さ |
+| `PLAN_REVIEW_CLAUDE_MODEL` | `claude -p --model <値>` | `opus`（Claude Codeの別名で、最新のOpusを指す） |
+| `PLAN_REVIEW_CLAUDE_EFFORT` | `claude -p --effort <値>` | `high` |
 
-`-c`で渡すので、`~/.codex/config.toml`の`model_reasoning_effort`より優先される。`plan-review`以外でのCodexの使い方には影響しない。
+- Codexの推論の強さは`-c`で渡すので、`~/.codex/config.toml`の`model_reasoning_effort`より優先される。`plan-review`以外でのCodexの使い方には影響しない
+- Codexの既定値はCLIを更新すると変わることがある。実際に使った値は、レビューのたびに「使ったモデル」として表示され、`rNN_review.log`の見出し（`model:`と`reasoning effort:`の行）にも残る
+- Claudeのモデルには、別名（`opus`、`sonnet`、`fable`）か、モデルの名前（`claude-opus-5-5`など）を書ける。Planを書いたセッションと違う系統のモデルでレビューさせたいときは、`fable`を指定する
+- 前の版の`PLAN_REVIEW_MODEL`と`PLAN_REVIEW_EFFORT`は読まない。設定されていると、新しい名前を案内する
+- Claudeは、`--tools "Read,Grep,Glob" --restricted --strict-mcp-config`で呼ぶ。読むツールだけを使い、利用者とプロジェクトの設定ファイル（hooksや許可の設定）とMCPサーバーを読み込まず、ファイルは作業ディレクトリの中だけを読む。リポジトリの`CLAUDE.md`も、最初には読み込まない（必要ならReadで読める）。Claude Code 2.1.302で確かめた。`--restricted`の無い古い版では`claude`が失敗するので、Claude Codeを更新する
 
-常に同じ値を使うときは、Claude Codeの`settings.json`の`env`に書く。
+常に同じ値を使うときは、手元ではClaude Codeの`settings.json`の`env`に書く。クラウドセッションでは、環境の設定の環境変数に書く。
 
 ```json
 {
   "env": {
-    "PLAN_REVIEW_MODEL": "gpt-6.1-sol",
-    "PLAN_REVIEW_EFFORT": "high"
+    "PLAN_REVIEW_REVIEWER": "claude",
+    "PLAN_REVIEW_CLAUDE_MODEL": "fable",
+    "PLAN_REVIEW_CODEX_EFFORT": "high"
   }
 }
 ```
 
-使えるモデルと推論の強さは、Codex CLIの版とアカウントによって変わる。使えない値を設定すると`codex`が0以外で終わり、エラーの文面が`rNN_codex.log`に残る。このとき、設定されている環境変数の値もあわせて表示される。
+使えるモデルと推論の強さは、CLIの版とアカウントによって変わる。使えない値を設定したり、利用上限に達したりすると、レビューする側が0以外で終わり、エラーの文面が`rNN_review.log`に残る。このとき、設定されている環境変数の値もあわせて表示される。
 
 ## .gitignoreの推奨設定
 
