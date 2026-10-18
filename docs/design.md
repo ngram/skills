@@ -96,7 +96,7 @@ ZIPは添付しない。理由は次のとおり。
 
 - `<name>/README.md`のインストール手順：マーカーで囲んだブロックだけを書き換え、ブロックの外の手書きの部分は残す
 - `.claude-plugin/marketplace.json`：Skillごとに1つのプラグインの項目
-- `README.md`のSkill一覧：マーカーで囲んだ表
+- `README.md`のSkill一覧：マーカーで囲んだ表。ライセンスの列では、`license`に書いたファイル名（`LICENSE.txt`など）をSkillのディレクトリのファイルへのリンクにし、ファイルを書いていない`MIT`はルートの`LICENSE`へのリンクにする
 
 `--check`を付けると書き込まずに比べ、ずれがあれば終了コード1で終わる。あわせて次の点も検査する。
 
@@ -104,6 +104,7 @@ ZIPは添付しない。理由は次のとおり。
 - `description`の長さ（1024文字以内）と`compatibility`の長さ（500文字以内）
 - `description`に山括弧（`<`か`>`）が無いか。skill-creatorの`quick_validate.py`と同じ規則で、claude.aiは山括弧を含むSkillを、エラーを出さずに保存しない（v0.2.2の`plan-create`で起きた）
 - `description`の最初の文と`compatibility`が体言止めか。どちらもSkill一覧の表のセルになる（`japanese-tech-writing`の「表のセルの書き方」）。判定は`git-commit`の`check_message.mjs`と同じで、表とマーケットプレイスには、最初の文を末尾の句点を除いて入れる
+- `license`に書いたファイル（`LICENSE.txt`など）が、Skillのディレクトリにあるか
 - リポジトリのすべてのテキストファイルで、改行がLFか、見えない文字（BOM、ゼロ幅文字、双方向制御文字）が無いか
 - Claude Codeがプラグインの部品として読むディレクトリ（`bin/`、`hooks/`、`agents/`、`commands/`）が無いか
 - `gh skill install`が書き込む`metadata.github-*`が残っていないか

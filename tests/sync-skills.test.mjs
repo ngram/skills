@@ -16,14 +16,14 @@ const MARKERS = readFileSync(join(ROOT, "README.md"), "utf8")
   .split("\n")
   .filter((l) => l.includes("skills:list:begin") || l.includes("skills:list:end"));
 
-function fixture(description, compatibility) {
+function fixture(description, compatibility, license = "MIT") {
   const dir = mkdtempSync(join(tmpdir(), "sync-skills-"));
   mkdirSync(join(dir, "scripts"));
   copyFileSync(join(ROOT, "scripts", "sync-skills.mjs"), join(dir, "scripts", "sync-skills.mjs"));
   writeFileSync(join(dir, "README.md"), `# 一覧\n\n${MARKERS.join("\n")}\n`);
   mkdirSync(join(dir, "sample"));
   const compat = compatibility ? `compatibility: ${compatibility}\n` : "";
-  writeFileSync(join(dir, "sample", "SKILL.md"), `---\nname: sample\ndescription: ${description}\n${compat}license: MIT\n---\n\n# sample\n`);
+  writeFileSync(join(dir, "sample", "SKILL.md"), `---\nname: sample\ndescription: ${description}\n${compat}license: ${license}\n---\n\n# sample\n`);
   return dir;
 }
 
@@ -62,4 +62,28 @@ test("一覧の表とマーケットプレイスには、description の最初�
   assert.match(readme, /^\| \[sample\]\(sample\/\) \| 計画の作成とファイルへの保存 \| gitが必要。パッケージを調べるときは、ネットワーク接続も必要 \| MIT \|$/mu);
   const catalog = JSON.parse(readFileSync(join(dir, ".claude-plugin", "marketplace.json"), "utf8"));
   assert.equal(catalog.plugins[0].description, "計画の作成とファイルへの保存");
+});
+
+test("一覧の表のライセンスの列で、license に書いたファイルと、ルートの LICENSE をリンクにする", () => {
+  const dir = fixture("計画の作成。", undefined, "Unlicense AND MIT。元の部分はUnlicense（LICENSE.txt）、足した部分はMIT（LICENSE-MIT.txt）");
+  writeFileSync(join(dir, "sample", "LICENSE.txt"), "Unlicense\n");
+  writeFileSync(join(dir, "sample", "LICENSE-MIT.txt"), "MIT\n");
+  const r = sync(dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(
+    readFileSync(join(dir, "README.md"), "utf8"),
+    /\| Unlicense AND MIT。元の部分はUnlicense（\[LICENSE\.txt\]\(sample\/LICENSE\.txt\)）、足した部分はMIT（\[LICENSE-MIT\.txt\]\(sample\/LICENSE-MIT\.txt\)） \|$/mu,
+  );
+
+  const mit = fixture("計画の作成。");
+  writeFileSync(join(mit, "LICENSE"), "MIT License\n");
+  assert.equal(sync(mit).status, 0);
+  assert.match(readFileSync(join(mit, "README.md"), "utf8"), /\| \[MIT\]\(LICENSE\) \|$/mu);
+});
+
+test("license に書いたファイルが Skill のディレクトリに無ければ失敗する", () => {
+  const dir = fixture("計画の作成。", undefined, "Unlicense（LICENSE.txt）");
+  const r = sync(dir);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /sample: license に書いたファイル「LICENSE\.txt」が Skill のディレクトリに無い/);
 });

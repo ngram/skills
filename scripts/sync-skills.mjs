@@ -13,7 +13,7 @@
 //   node scripts/sync-skills.mjs           生成したファイルを書き込む
 //   node scripts/sync-skills.mjs --check   書き込まずに検査する（CI 用）。ずれや問題があれば終了コード1
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -43,6 +43,8 @@ const PREDICATE_END = /(?:[うくぐすぶむるただ]|ない|無い|しい|で
 const NOUN_END = /(?:近く|多く|遠く)$/u;
 // 末尾の句点、空白、括弧書き。
 const TRAILER = /(?:[。.\s]+|（[^（）]*）|\([^()]*\))$/u;
+// license の値の中の、ライセンスの本文のファイル名（LICENSE.txt、LICENSE-MIT.txt など）。
+const LICENSE_FILE = /\b(?:LICENSE|COPYING|NOTICE)[\w.-]*/gu;
 
 // frontmatter の最上位の「キー: 値」だけを読む。値は1行のスカラーか、> と | のブロックスカラーか、
 // 1段だけ字下げした「キー: 値」の対応表（metadata など）に限る。
@@ -105,6 +107,10 @@ function textProblems() {
   return problems;
 }
 
+function isFile(path) {
+  return existsSync(path) && statSync(path).isFile();
+}
+
 function findSkills() {
   return readdirSync(ROOT, { withFileTypes: true })
     .filter((e) => e.isDirectory() && !e.name.startsWith(".") && e.name !== "node_modules")
@@ -137,6 +143,9 @@ function inspectSkill(dir) {
   if (compatibility) {
     const ending = tableCellEnding(compatibility);
     if (ending) problems.push(`compatibility が体言止めになっていない（「…${ending}」で終わる）。README の Skill 一覧の表のセルになるので、体言止めにする（「Node.js 18以降が必要」など）`);
+  }
+  for (const file of fields.license?.match(LICENSE_FILE) ?? []) {
+    if (!isFile(join(ROOT, dir, file))) problems.push(`license に書いたファイル「${file}」が Skill のディレクトリに無い`);
   }
   if (/^\s+github-/m.test(raw)) problems.push("gh skill install が書き込む metadata.github-* が残っている。導入したコピーではなく原本を置く");
   const claudeAi = typeof fields.metadata === "object" ? fields.metadata["claude-ai"] : undefined;
@@ -269,9 +278,17 @@ function skillReadmeBlock(s) {
   return lines.join("\n");
 }
 
+// 一覧の表のライセンスの列。license の値に書いたファイル名を、Skill のディレクトリのファイルへのリンクにする。
+// ファイルを書いていない MIT は、ルートの LICENSE（MIT）へのリンクにする。
+function licenseCell(s) {
+  if (!s.license) return "未設定";
+  if (s.license === "MIT" && isFile(join(ROOT, "LICENSE"))) return "[MIT](LICENSE)";
+  return s.license.replace(LICENSE_FILE, (file) => (isFile(join(ROOT, s.dir, file)) ? `[${file}](${s.dir}/${file})` : file));
+}
+
 function listBlock(skills) {
   const rows = skills.map((s) =>
-    `| [${s.name}](${s.dir}/) | ${firstSentence(s.description)} | ${s.compatibility ?? "なし"} | ${s.license ?? "未設定"} |`,
+    `| [${s.name}](${s.dir}/) | ${firstSentence(s.description)} | ${s.compatibility ?? "なし"} | ${licenseCell(s)} |`,
   );
   return [
     LIST_BEGIN,
