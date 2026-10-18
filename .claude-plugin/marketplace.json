@@ -16,6 +16,11 @@
       "description": "日本語の技術文書・書籍原稿の文章規範。"
     },
     {
+      "name": "plan-create",
+      "source": "./plan-create",
+      "description": "実装の前に計画（Plan）を書き、plan/YYYYMMDD_<機能名>.mdに残す。"
+    },
+    {
       "name": "plan-review",
       "source": "./plan-review",
       "description": "plan/配下のPlanファイルをCodexにレビューさせ、履歴をplan/.reviews/に残して差分を表示する。"
