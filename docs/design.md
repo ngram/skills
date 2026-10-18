@@ -100,6 +100,7 @@ ZIPは添付しない。理由は次のとおり。
 
 - `name`とディレクトリ名の一致と、Agent Skills仕様の命名規則
 - `description`の長さ（1024文字以内）と`compatibility`の長さ（500文字以内）
+- `description`に山括弧（`<`か`>`）が無いか。skill-creatorの`quick_validate.py`と同じ規則で、claude.aiは山括弧を含むSkillを、エラーを出さずに保存しない（v0.2.2の`plan-create`で起きた）
 - リポジトリのすべてのテキストファイルで、改行がLFか、見えない文字（BOM、ゼロ幅文字、双方向制御文字）が無いか
 - Claude Codeがプラグインの部品として読むディレクトリ（`bin/`、`hooks/`、`agents/`、`commands/`）が無いか
 - `gh skill install`が書き込む`metadata.github-*`が残っていないか

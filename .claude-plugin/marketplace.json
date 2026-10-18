@@ -18,7 +18,7 @@
     {
       "name": "plan-create",
       "source": "./plan-create",
-      "description": "実装の前に計画（Plan）を書き、plan/YYYYMMDD_<機能名>.mdに残す。"
+      "description": "実装の前に計画（Plan）を書き、plan/YYYYMMDD_機能名.mdに残す。"
     },
     {
       "name": "plan-review",

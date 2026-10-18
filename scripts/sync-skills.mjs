@@ -118,7 +118,11 @@ function inspectSkill(dir) {
     if (!NAME_PATTERN.test(name) || name.length > 64) problems.push(`name「${name}」が Agent Skills の命名規則に合わない`);
   }
   if (!description) problems.push("description が無い");
-  else if ([...description].length > 1024) problems.push(`description が1024文字を超えている（${[...description].length}文字）`);
+  else {
+    if ([...description].length > 1024) problems.push(`description が1024文字を超えている（${[...description].length}文字）`);
+    // skill-creator の quick_validate.py と同じ規則。claude.ai は山括弧を含む Skill を、エラーを出さずに保存しない。
+    if (/[<>]/u.test(description)) problems.push("description に山括弧（< か >）がある。claude.ai に入れられないので、括弧などに書き換える");
+  }
   if (compatibility && [...compatibility].length > 500) problems.push("compatibility が500文字を超えている");
   if (/^\s+github-/m.test(raw)) problems.push("gh skill install が書き込む metadata.github-* が残っている。導入したコピーではなく原本を置く");
   const claudeAi = typeof fields.metadata === "object" ? fields.metadata["claude-ai"] : undefined;
