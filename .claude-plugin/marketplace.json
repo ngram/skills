@@ -18,7 +18,7 @@
     {
       "name": "plan-review",
       "source": "./plan-review",
-      "description": "plan/ 配下の Plan ファイルを Codex にレビューさせ、履歴を plan/.reviews/ に蓄積して diff を表示する。"
+      "description": "plan/配下のPlanファイルをCodexにレビューさせ、履歴をplan/.reviews/に残して差分を表示する。"
     },
     {
       "name": "readme-writing",
