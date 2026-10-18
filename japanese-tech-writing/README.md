@@ -78,6 +78,7 @@ Skillの内容は[SKILL.md](./SKILL.md)にある。
 
 - 末尾の「日本語と英数字の間の空白」の節と、その節が使う`scripts/fix_spacing.mjs`。`git-commit`のSkillが行っている、日本語と英数字の間の空白の除去と検査の移植
 - 末尾の「見出しと用語の逐語訳」と「手順の書き方」の節。英語の用語を語ごとに訳した見出しと、必須と任意が混ざった手順を避けるための規範で、取り込み元の「見出しの付け方」と、術語・訳語の規則を補うもの
+- 末尾の「表のセルの書き方」の節。表のセルを、末尾に句点の無い体言止めの句でそろえるための規範
 - frontmatterの`compatibility`の行
 
 足した部分は、ngram/skillsのほかのSkillと同じく[MIT License](./LICENSE-MIT.txt)とする（Copyright (c) 2026 ngram）。取り込み元の部分はUnlicenseのままである。取り込み元の部分の変更は、取り込み元に提案する。

@@ -8,32 +8,32 @@
     {
       "name": "git-commit",
       "source": "./git-commit",
-      "description": "Git のステージング、日本語のコミットメッセージ案とプルリクエストのタイトル・本文の作成、コミットの手順と書式。"
+      "description": "Gitのステージング、日本語のコミットメッセージ案とプルリクエストのタイトル・本文の作成、コミットの手順と書式"
     },
     {
       "name": "japanese-tech-writing",
       "source": "./japanese-tech-writing",
-      "description": "日本語の技術文書・書籍原稿の文章規範。"
+      "description": "日本語の技術文書・書籍原稿の文章規範"
     },
     {
       "name": "plan-create",
       "source": "./plan-create",
-      "description": "実装の前に計画（Plan）を書き、plan/YYYYMMDD_機能名.mdに残す。"
+      "description": "実装の前の計画（Plan）の作成と、plan/YYYYMMDD_機能名.mdへの保存"
     },
     {
       "name": "plan-review",
       "source": "./plan-review",
-      "description": "plan/配下のPlanファイルをCodexにレビューさせ、履歴をplan/.reviews/に残して差分を表示する。"
+      "description": "Codexによる、plan/配下のPlanファイルのレビュー"
     },
     {
       "name": "readme-writing",
       "source": "./readme-writing",
-      "description": "READMEを、初めての人が使い始めるための入口として短く書く。"
+      "description": "初めての人が使い始めるための入口としての、短いREADMEの作成と見直し"
     },
     {
       "name": "repo-privacy-audit",
       "source": "./repo-privacy-audit",
-      "description": "リポジトリと公開済みのパッケージに、個人情報・秘密情報・機微情報が含まれていないかを調べ、値を伏せて報告する。"
+      "description": "リポジトリと公開済みのパッケージの、個人情報・秘密情報・機微情報の検査と、値を伏せた報告"
     }
   ]
 }

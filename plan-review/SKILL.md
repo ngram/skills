@@ -1,6 +1,6 @@
 ---
 name: plan-review
-description: plan/配下のPlanファイルをCodexにレビューさせ、履歴をplan/.reviews/に残して差分を表示する。Planの「保証の水準」をCodexに渡して指摘を重大度で分けさせ、「重大」の指摘が無くなった時点で終える。ユーザーが/plan-reviewと明示的に指示したときだけ使う。
+description: Codexによる、plan/配下のPlanファイルのレビュー。履歴をplan/.reviews/に残し、差分を表示する。Planの「保証の水準」をCodexに渡して指摘を重大度で分けさせ、「重大」の指摘が無くなった時点で終える。ユーザーが/plan-reviewと明示的に指示したときだけ使う。
 argument-hint: "[plan-file-name]"
 disable-model-invocation: true
 compatibility: Claude Code向け（引数の置換とdisable-model-invocationを使う）。手元のbashとcodex CLIが必要で、claude.aiはサポート外
