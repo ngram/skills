@@ -1,7 +1,7 @@
 <!-- skills:readme:begin（scripts/sync-skills.mjs が生成する。このブロックは手で編集しない） -->
 # plan-review
 
-> plan/ 配下の Plan ファイルを Codex にレビューさせ、履歴を plan/.reviews/ に蓄積して diff を表示する。ユーザーが /plan-review と明示的に指示したときだけ使う。
+> plan/配下のPlanファイルをCodexにレビューさせ、履歴をplan/.reviews/に残して差分を表示する。Planの「保証の水準」をCodexに渡して指摘を重大度で分けさせ、「重大」の指摘が無くなった時点で終える。ユーザーが/plan-reviewと明示的に指示したときだけ使う。
 
 必要なもの：Claude Code向け（引数の置換とdisable-model-invocationを使う）。手元のbashとcodex CLIが必要で、claude.aiはサポート外
 
