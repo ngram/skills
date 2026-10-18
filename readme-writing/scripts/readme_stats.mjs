@@ -18,11 +18,13 @@
 // 使い方の節（Usage、使い方など）と、設定ファイルの keep に書いた節には、節の行数の上限をかけない。
 //
 // 予算のほかに、README の日本語の箇条書き（番号付きの手順を含む）と表のセルが、体言止めかを確かめる。判定は
-// git-commit スキルの check_message.mjs と同じである。自動生成のブロック（<!-- 〜:begin --> から <!-- 〜:end --> まで）と
-// コードブロックは見ない。
+// git-commit スキルの check_message.mjs と同じである。表のセルは、末尾の句点も指摘する。自動生成のブロック
+// （<!-- 〜:begin --> から <!-- 〜:end --> まで）とコードブロックは見ない。
+// ほかの節の見出しを含む見出しの節（「インストール」と「バージョンを指定したインストール」など）は、同じ話題の節として注意に出す。
 //
-// 終了コード: 0 は指摘なし、1 は指摘あり（予算の超過、体言止めでない項目、リンクの切れ、--moved-from で見つからないもの）、
-// 2 は使い方か設定ファイルの誤り。「注意」（長いコードブロック、見つからない見出しなど）は終了コードに含めない。
+// 終了コード: 0 は指摘なし、1 は指摘あり（予算の超過、体言止めでない項目、句点で終わる表のセル、リンクの切れ、
+// --moved-from で見つからないもの）、2 は使い方か設定ファイルの誤り。「注意」（長いコードブロック、見つからない見出し、
+// 同じ話題の節など）は終了コードに含めない。
 
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
@@ -599,7 +601,7 @@ function analyze(opts) {
     if (!headings.some((h) => h.title === name)) problems.push({ severity: "warn", at: configPath, message: `keep の「${name}」に当たる見出しが README に無い` });
   }
 
-  // 箇条書き（番号付きの手順を含む）と表のセルの体言止め。自動生成のブロックとコードブロックは見ない。
+  // 箇条書き（番号付きの手順を含む）と表のセルの体言止めと、表のセルの末尾の句点。自動生成のブロックとコードブロックは見ない。
   let generated = false;
   doc.rows.forEach((r, i) => {
     if (r.type === "html" && GENERATED_BEGIN.test(r.text)) generated = true;
@@ -614,8 +616,22 @@ function analyze(opts) {
     for (const [what, text] of items) {
       const ending = JAPANESE.test(text) ? predicateEnding(text) : null;
       if (ending) problems.push({ severity: "error", at: `${readme}:${i + 1}`, message: `${what}が体言止めになっていない（「…${ending}」で終わる）` });
+      if (what === "表のセル" && /。$/u.test(text.trim())) problems.push({ severity: "error", at: `${readme}:${i + 1}`, message: "表のセルの末尾に句点がある" });
     }
   });
+
+  // ほかの節の見出しを含む見出しの節は、同じ話題の節として、その節の中の節にできることが多い。
+  const tops = sections.filter((s) => !s.intro);
+  for (const s of tops) {
+    const parent = tops.find((t) => t !== s && [...t.title].length >= 2 && s.title.toLowerCase().includes(t.title.toLowerCase()));
+    if (parent) {
+      problems.push({
+        severity: "warn",
+        at: `${readme}:${s.index + 1}`,
+        message: `節「${s.title}」は、節「${parent.title}」と同じ話題なら、その中の節にする`,
+      });
+    }
+  }
 
   const deep = headings.filter((h) => h.level > lim("maxHeadingDepth"));
   if (deep.length > 0) {

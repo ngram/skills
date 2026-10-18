@@ -36,6 +36,13 @@ const NAME_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const PLUGIN_COMPONENT_DIRS = ["bin", "hooks", "agents", "commands", ".claude-plugin"];
 // BOM、ゼロ幅文字、双方向制御文字。APM が「hidden characters」として警告する。
 const HIDDEN_CHARS = /[\uFEFF\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069]/u;
+const JAPANESE = /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u;
+// 体言止めでない終わり方。git-commit スキルの check_message.mjs と同じ判定である。
+const PREDICATE_END = /(?:[うくぐすぶむるただ]|ない|無い|しい|です|ます|よい|きい|さい|[多長古早遅重軽高低強弱良広狭近遠]い)$/u;
+// 上の形に当たるが、名詞として項目の終わりに来る語。
+const NOUN_END = /(?:近く|多く|遠く)$/u;
+// 末尾の句点、空白、括弧書き。
+const TRAILER = /(?:[。.\s]+|（[^（）]*）|\([^()]*\))$/u;
 
 // frontmatter の最上位の「キー: 値」だけを読む。値は1行のスカラーか、> と | のブロックスカラーか、
 // 1段だけ字下げした「キー: 値」の対応表（metadata など）に限る。
@@ -122,8 +129,15 @@ function inspectSkill(dir) {
     if ([...description].length > 1024) problems.push(`description が1024文字を超えている（${[...description].length}文字）`);
     // skill-creator の quick_validate.py と同じ規則。claude.ai は山括弧を含む Skill を、エラーを出さずに保存しない。
     if (/[<>]/u.test(description)) problems.push("description に山括弧（< か >）がある。claude.ai に入れられないので、括弧などに書き換える");
+    // 最初の文は README の Skill 一覧の表のセルになる。表のセルは体言止めにする（japanese-tech-writing の「表のセルの書き方」）。
+    const ending = tableCellEnding(firstSentence(description));
+    if (ending) problems.push(`description の最初の文が体言止めになっていない（「…${ending}」で終わる）。README の Skill 一覧の表のセルになるので、体言止めにする`);
   }
   if (compatibility && [...compatibility].length > 500) problems.push("compatibility が500文字を超えている");
+  if (compatibility) {
+    const ending = tableCellEnding(compatibility);
+    if (ending) problems.push(`compatibility が体言止めになっていない（「…${ending}」で終わる）。README の Skill 一覧の表のセルになるので、体言止めにする（「Node.js 18以降が必要」など）`);
+  }
   if (/^\s+github-/m.test(raw)) problems.push("gh skill install が書き込む metadata.github-* が残っている。導入したコピーではなく原本を置く");
   const claudeAi = typeof fields.metadata === "object" ? fields.metadata["claude-ai"] : undefined;
   if (claudeAi !== undefined && claudeAi !== "unsupported") {
@@ -144,10 +158,25 @@ function inspectSkill(dir) {
   };
 }
 
-// 説明文の最初の文。マーケットプレイスと一覧の短い説明に使う。
+// 説明文の最初の文。マーケットプレイスと一覧の短い説明に使う。1行の説明なので、末尾の句点は付けない。
 function firstSentence(text) {
   const i = text.indexOf("。");
-  return i === -1 ? text : text.slice(0, i + 1);
+  return i === -1 ? text : text.slice(0, i);
+}
+
+// 体言止めでなければ、終わりの数文字を返す。git-commit スキルの check_message.mjs と同じ関数である。
+function predicateEnding(text) {
+  let s = text;
+  for (let prev = null; s !== prev; ) {
+    prev = s;
+    s = s.replace(TRAILER, "");
+  }
+  if (!PREDICATE_END.test(s) || NOUN_END.test(s)) return null;
+  return [...s].slice(-3).join("");
+}
+
+function tableCellEnding(text) {
+  return JAPANESE.test(text) ? predicateEnding(text) : null;
 }
 
 // README の claude.ai の節。frontmatter の metadata に claude-ai: unsupported があるSkillは、サポート外と案内する。

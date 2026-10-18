@@ -275,11 +275,48 @@ test("日本語の箇条書き、番号付きの手順、表のセルの体言�
   ]);
 });
 
-test("体言止めの判定の表と関数は check_message.mjs と同じ", () => {
+test("表のセルの末尾の句点を指摘し、ほかの節の見出しを含む見出しの節を注意に出す", () => {
+  const dir = repo({
+    "README.md": [
+      "# 名前",
+      "",
+      "## インストール",
+      "",
+      "| 経路 | 入れ方 |",
+      "| --- | --- |",
+      "| npm | `npm install`での導入。 |",
+      "| 手元 | フォルダのコピー。ほかの方法も可能 |",
+      "",
+      "## 使い方",
+      "",
+      "説明の文。",
+      "",
+      "## バージョンを指定したインストール",
+      "",
+      "説明の文。",
+      "",
+      "<!-- skills:list:begin（生成する） -->",
+      "| 生成 | 句点で終わるセル。 |",
+      "<!-- skills:list:end -->",
+      "",
+    ].join("\n"),
+  });
+  const r = run("--json", join(dir, "README.md"));
+  assert.equal(r.status, 1);
+  const found = r.json.problems.map((p) => `${p.severity} ${p.at.slice(dir.length + 1)} ${p.message}`);
+  assert.deepEqual(found, [
+    "error README.md:7 表のセルの末尾に句点がある",
+    "warn README.md:14 節「バージョンを指定したインストール」は、節「インストール」と同じ話題なら、その中の節にする",
+  ]);
+});
+
+test("readme_stats.mjs と sync-skills.mjs の体言止めの判定の表と関数は check_message.mjs と同じ", () => {
   const read = (file) => readFileSync(join(ROOT, file), "utf8");
   const pick = (text) => [
     ...["PREDICATE_END", "NOUN_END", "TRAILER"].map((name) => text.match(new RegExp(`^const ${name} = .*$`, "mu"))[0]),
     text.match(/^function predicateEnding[\s\S]*?^\}$/mu)[0],
   ];
-  assert.deepEqual(pick(read("readme-writing/scripts/readme_stats.mjs")), pick(read("git-commit/scripts/check_message.mjs")));
+  for (const file of ["readme-writing/scripts/readme_stats.mjs", "scripts/sync-skills.mjs"]) {
+    assert.deepEqual(pick(read(file)), pick(read("git-commit/scripts/check_message.mjs")), file);
+  }
 });
