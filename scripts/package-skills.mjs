@@ -95,7 +95,9 @@ function main(argv) {
         continue;
       }
       const skill = join(out, `${name}.skill`);
-      git(["archive", "--format=zip", `--output=${skill}`, opts.ref, `${name}/`]);
+      // core.autocrlf が true の環境（Windows の既定）では、git archive が改行を CRLF に変えて入れるので、
+      // 使う人の設定によらずコミットした内容のまま入れる。.gitattributes の eol の指定は、これまでどおり効く。
+      git(["-c", "core.autocrlf=false", "archive", "--format=zip", `--output=${skill}`, opts.ref, `${name}/`]);
       console.log(`作成: ${relative(process.cwd(), skill)}（${statSync(skill).size} バイト）`);
       const keys = fm.unsupportedKeys;
       if (keys.length) {
