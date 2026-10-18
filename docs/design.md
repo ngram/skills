@@ -105,6 +105,7 @@ ZIPは添付しない。理由は次のとおり。
 - `description`に山括弧（`<`か`>`）が無いか。skill-creatorの`quick_validate.py`と同じ規則で、claude.aiは山括弧を含むSkillを、エラーを出さずに保存しない（v0.2.2の`plan-create`で起きた）
 - `description`の最初の文と`compatibility`が体言止めか。どちらもSkill一覧の表のセルになる（`japanese-tech-writing`の「表のセルの書き方」）。判定は`git-commit`の`check_message.mjs`と同じで、表とマーケットプレイスには、最初の文を末尾の句点を除いて入れる
 - `license`に書いたファイル（`LICENSE.txt`など）が、Skillのディレクトリにあるか
+- `SKILL.md`に、ドル記号に数字が続く形（シェルの位置引数と同じ形）が無いか。Claude Codeは、Skillの本文の`$ARGUMENTS`とこの形を、渡した引数で置き換える。`plan-review`の引数を読むループの位置引数が、引数の値に置き換わったことから足した。波括弧で囲んだ形は置き換わらない
 - リポジトリのすべてのテキストファイルで、改行がLFか、見えない文字（BOM、ゼロ幅文字、双方向制御文字）が無いか
 - Claude Codeがプラグインの部品として読むディレクトリ（`bin/`、`hooks/`、`agents/`、`commands/`）が無いか
 - `gh skill install`が書き込む`metadata.github-*`が残っていないか

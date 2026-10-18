@@ -147,6 +147,13 @@ function inspectSkill(dir) {
   for (const file of fields.license?.match(LICENSE_FILE) ?? []) {
     if (!isFile(join(ROOT, dir, file))) problems.push(`license に書いたファイル「${file}」が Skill のディレクトリに無い`);
   }
+  // Claude Code は、Skill の本文の $ARGUMENTS と、ドル記号に数字が続く形（シェルの位置引数と同じ形）を、渡した引数で置き換える。
+  // シェルの位置引数のつもりで書くと、引数の値に変わる。波括弧で囲んだ形（\${1}）は置き換わらない。
+  const positional = /\$\d/u.exec(text);
+  if (positional) {
+    const line = text.slice(0, positional.index).split("\n").length;
+    problems.push(`SKILL.md の${line}行目に「${positional[0]}」がある。Claude Code が引数で置き換えるので、波括弧で囲むか、書き換える`);
+  }
   if (/^\s+github-/m.test(raw)) problems.push("gh skill install が書き込む metadata.github-* が残っている。導入したコピーではなく原本を置く");
   const claudeAi = typeof fields.metadata === "object" ? fields.metadata["claude-ai"] : undefined;
   if (claudeAi !== undefined && claudeAi !== "unsupported") {
