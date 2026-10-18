@@ -461,7 +461,8 @@ function checkLinks(doc, root, cache, problems) {
       cache.set(resolved, anchorsOf(d.text, d.rows));
     }
     if (!cache.get(resolved).has(anchor.toLowerCase())) {
-      const where = path ? `「${relative(dirname(doc.file), resolved) || path}」` : "このファイル";
+      // リンクと同じ / 区切りで示す。Windows の relative() は \ 区切りを返す。
+      const where = path ? `「${relative(dirname(doc.file), resolved).split(sep).join("/") || path}」` : "このファイル";
       problems.push({ severity: "error", at, message: `アンカー「#${anchor}」が${where}に無い` });
     }
   }

@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -160,7 +160,8 @@ test("相対リンクのファイルとアンカーを確かめ、リポジト�
   });
   const r = run("--json", join(dir, "README.md"), join(dir, "docs", "setup.md"));
   assert.equal(r.status, 1);
-  const links = r.json.problems.map((p) => `${p.at.slice(dir.length + 1)} ${p.message}`);
+  // at は OS のパスのまま返るので、Windows の \ 区切りを / にそろえて比べる。
+  const links = r.json.problems.map((p) => `${p.at.slice(dir.length + 1).split(sep).join("/")} ${p.message}`);
   assert.deepEqual(links.sort(), [
     "README.md:4 アンカー「#no-such」が「docs/setup.md」に無い",
     "README.md:5 リンク先「docs/missing.md」が無い",
