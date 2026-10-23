@@ -1,7 +1,7 @@
 <!-- skills:readme:begin（scripts/sync-skills.mjs が生成する。このブロックは手で編集しない） -->
 # plan-review
 
-> CodexかClaudeによる、plan/配下のPlanファイルのレビュー。レビューする側は引数か環境変数で選び、既定ではcodexにログイン済みならCodex、そうでなければClaude（claude -p）を使う。履歴をplan/.reviews/に残し、差分を表示する。Planの「保証の水準」をレビューする側に渡して指摘を重大度で分けさせ、「重大」の指摘が無くなった時点で終える。ユーザーが/plan-reviewと明示的に指示したときだけ使う。
+> CodexかClaudeによる、plan/配下のPlanファイルのレビュー。レビューする側は引数か環境変数で選び、既定ではcodexにログイン済みならCodex、そうでなければClaude（claude -p）を使う。履歴をplan/.reviews/に残し、差分を表示する。Planの「外部との入出力」と「実現すること・しないこと」を前提に、レビューする側に指摘を重大度で分けさせ、「重大」の指摘が無くなった時点で終える。ユーザーが/plan-reviewと明示的に指示したときだけ使う。
 
 必要なもの：Claude Code（手元とクラウドセッション）向け（引数の置換とdisable-model-invocationを使う）。bashと、codex CLIかclaude CLIが必要。claude.aiのチャットは対象外
 
