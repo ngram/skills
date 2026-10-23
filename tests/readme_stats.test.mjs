@@ -235,7 +235,7 @@ test("全角の範囲の表は check_message.mjs と同じ", () => {
   assert.equal(table("readme-writing/scripts/readme_stats.mjs"), table("git-commit/scripts/check_message.mjs"));
 });
 
-test("日本語の箇条書き、番号付きの手順、表のセルの体言止めを確かめ、自動生成のブロックとコードブロックは見ない", () => {
+test("表のセルの体言止めと、箇条書きの足した「状態」とです・ます調を確かめ、自動生成のブロックとコードブロックは見ない", () => {
   const dir = repo({
     "README.md": [
       "# 名前",
@@ -243,9 +243,10 @@ test("日本語の箇条書き、番号付きの手順、表のセルの体言�
       "## 使い方",
       "",
       "- 設定ファイルの作成",
-      "- 設定ファイルを作る",
+      "- 古い版では設定ファイルを読まない",
+      "- 古い版では設定ファイルを読まない状態",
       "1. `npm test`の実行（CIでも実行する）",
-      "2. テストを通す。",
+      "2. テストを通します。",
       "- [開発の手順](docs/development.md)",
       "- Install with `go install`",
       "",
@@ -267,11 +268,13 @@ test("日本語の箇条書き、番号付きの手順、表のセルの体言�
   });
   const r = run("--json", join(dir, "README.md"));
   assert.equal(r.status, 1);
-  const found = r.json.problems.filter((p) => p.message.includes("体言止め")).map((p) => `${p.at.slice(dir.length + 1)} ${p.message}`);
+  const found = r.json.problems
+    .filter((p) => /体言止め|「状態」|です・ます調/u.test(p.message))
+    .map((p) => `${p.at.slice(dir.length + 1)} ${p.message}`);
   assert.deepEqual(found, [
-    "README.md:6 箇条書きが体言止めになっていない（「…を作る」で終わる）",
-    "README.md:8 箇条書きが体言止めになっていない（「…を通す」で終わる）",
-    "README.md:15 表のセルが体言止めになっていない（「…ーする」で終わる）",
+    "README.md:7 箇条書きが、述語の後ろに「状態」を足している（「…まない状態」）",
+    "README.md:9 箇条書きがです・ます調で終わっている（「…を通します」）",
+    "README.md:16 表のセルが体言止めになっていない（「…ーする」で終わる）",
   ]);
 });
 
@@ -319,4 +322,7 @@ test("readme_stats.mjs と sync-skills.mjs の体言止めの判定の表と関�
   for (const file of ["readme-writing/scripts/readme_stats.mjs", "scripts/sync-skills.mjs"]) {
     assert.deepEqual(pick(read(file)), pick(read("git-commit/scripts/check_message.mjs")), file);
   }
+  // 箇条書きの、です・ます調と足した「状態」の判定も、readme_stats.mjs と check_message.mjs で同じにする。
+  const endings = (text) => ["POLITE_END", "PADDING_END"].map((name) => text.match(new RegExp(`^const ${name} = .*$`, "mu"))[0]);
+  assert.deepEqual(endings(read("readme-writing/scripts/readme_stats.mjs")), endings(read("git-commit/scripts/check_message.mjs")));
 });

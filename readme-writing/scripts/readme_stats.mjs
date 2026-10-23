@@ -17,12 +17,13 @@
 // 地の文の行数と節の行数の上限は、指定が無ければ全体の上限の30%とする。地の文の表示幅の上限は、地の文の上限×80桁とする。
 // 使い方の節（Usage、使い方など）と、設定ファイルの keep に書いた節には、節の行数の上限をかけない。
 //
-// 予算のほかに、README の日本語の箇条書き（番号付きの手順を含む）と表のセルが、体言止めかを確かめる。判定は
-// git-commit スキルの check_message.mjs と同じである。表のセルは、末尾の句点も指摘する。自動生成のブロック
-// （<!-- 〜:begin --> から <!-- 〜:end --> まで）とコードブロックは見ない。
+// 予算のほかに、README の日本語の箇条書き（番号付きの手順を含む）と表のセルの終わり方を確かめる。判定は
+// git-commit スキルの check_message.mjs と同じである。表のセルは、体言止めか、末尾に句点が無いかを見る。箇条書きは、
+// 述語の後ろに「状態」を足していないか（「〜で使えない状態」）、です・ます調で終わっていないかを見る。
+// 自動生成のブロック（<!-- 〜:begin --> から <!-- 〜:end --> まで）とコードブロックは見ない。
 // ほかの節の見出しを含む見出しの節（「インストール」と「バージョンを指定したインストール」など）は、同じ話題の節として注意に出す。
 //
-// 終了コード: 0 は指摘なし、1 は指摘あり（予算の超過、体言止めでない項目、句点で終わる表のセル、リンクの切れ、
+// 終了コード: 0 は指摘なし、1 は指摘あり（予算の超過、終わり方の合わない項目、句点で終わる表のセル、リンクの切れ、
 // --moved-from で見つからないもの）、2 は使い方か設定ファイルの誤り。「注意」（長いコードブロック、見つからない見出し、
 // 同じ話題の節など）は終了コードに含めない。
 
@@ -92,6 +93,10 @@ const PREDICATE_END = /(?:[うくぐすぶむるただ]|ない|無い|しい|で
 const NOUN_END = /(?:近く|多く|遠く)$/u;
 // 末尾の句点、空白、括弧書き。
 const TRAILER = /(?:[。.\s]+|（[^（）]*）|\([^()]*\))$/u;
+// です・ます調の終わり方。箇条書きは常体で書く。
+const POLITE_END = /(?:です|ます|ました|ません|でした|ましょう|ください)$/u;
+// 述語の後ろに足して、項目を名詞で終えるための語（「〜で使えない状態」）。用言止めで言える項目なので要らない。
+const PADDING_END = /状態$/u;
 
 class UsageError extends Error {}
 
@@ -601,7 +606,8 @@ function analyze(opts) {
     if (!headings.some((h) => h.title === name)) problems.push({ severity: "warn", at: configPath, message: `keep の「${name}」に当たる見出しが README に無い` });
   }
 
-  // 箇条書き（番号付きの手順を含む）と表のセルの体言止めと、表のセルの末尾の句点。自動生成のブロックとコードブロックは見ない。
+  // 表のセルの体言止めと末尾の句点、箇条書き（番号付きの手順を含む）の、足した「状態」とです・ます調。
+  // 自動生成のブロックとコードブロックは見ない。
   let generated = false;
   doc.rows.forEach((r, i) => {
     if (r.type === "html" && GENERATED_BEGIN.test(r.text)) generated = true;
@@ -613,10 +619,25 @@ function analyze(opts) {
     if (r.type === "table" && !/^[\s|:-]+$/u.test(r.text)) {
       for (const cell of r.text.trim().replace(/^\|/u, "").replace(/\|$/u, "").split("|")) items.push(["表のセル", plain(cell)]);
     }
+    const at = `${readme}:${i + 1}`;
     for (const [what, text] of items) {
-      const ending = JAPANESE.test(text) ? predicateEnding(text) : null;
-      if (ending) problems.push({ severity: "error", at: `${readme}:${i + 1}`, message: `${what}が体言止めになっていない（「…${ending}」で終わる）` });
-      if (what === "表のセル" && /。$/u.test(text.trim())) problems.push({ severity: "error", at: `${readme}:${i + 1}`, message: "表のセルの末尾に句点がある" });
+      if (!JAPANESE.test(text)) continue;
+      if (what === "表のセル") {
+        const ending = predicateEnding(text);
+        if (ending) problems.push({ severity: "error", at, message: `表のセルが体言止めになっていない（「…${ending}」で終わる）` });
+        if (/。$/u.test(text.trim())) problems.push({ severity: "error", at, message: "表のセルの末尾に句点がある" });
+        continue;
+      }
+      let s = text;
+      for (let prev = null; s !== prev; ) {
+        prev = s;
+        s = s.replace(TRAILER, "");
+      }
+      const tail = [...s].slice(-5).join("");
+      if (POLITE_END.test(s)) problems.push({ severity: "error", at, message: `箇条書きがです・ます調で終わっている（「…${tail}」）` });
+      if (PADDING_END.test(s) && predicateEnding(s.replace(PADDING_END, ""))) {
+        problems.push({ severity: "error", at, message: `箇条書きが、述語の後ろに「状態」を足している（「…${tail}」）` });
+      }
     }
   });
 
