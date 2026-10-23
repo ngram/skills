@@ -56,17 +56,39 @@ test("全角文字と記号で始まる語の間の空白を検出する", () =>
   assert.match(r.stdout, /全角文字と記号の間に空白/);
 });
 
-test("体言止めでない1行目と箇条書きを検出する", () => {
-  const r = run("fix: 案内を追加する\n\n## 問題\n- 予算と比べる手段が無い\n- 次のリリースから一覧に加わる\n- 古い版も使える\n");
+test("体言止めを求めるのは1行目だけで、箇条書きの常体の用言止めは通す", () => {
+  const ng = run("fix: 案内を追加する\n\n## 問題\n- 予算と比べる手段が無い\n");
+  assert.equal(ng.status, 1);
+  assert.equal(ng.stdout.match(/体言止めになっていない/g).length, 1);
+  assert.match(ng.stdout, /1行目が体言止めになっていない（「…加する」で終わる）/);
+  const ok = run([
+    "fix: 案内の追加",
+    "",
+    "## 問題",
+    "- 予算と比べる手段が無い",
+    "- クラウドセッションで使えない",
+    "- 実装計画が、リポジトリのファイルとしてコミットされている",
+    "",
+    "## 対応",
+    "- レビューする側の決定",
+    "- 初期状態への切り替え",
+    "",
+  ].join("\n"));
+  assert.equal(ok.status, 0, ok.stdout);
+});
+
+test("箇条書きの、述語の後ろに足した「状態」と、です・ます調を検出する", () => {
+  const r = run("fix: 案内の追加\n\n## 問題\n- クラウドセッションで使えない状態\n- 実装計画がコミットされている状態（plan/）。\n- 古い版も使えます\n- 初期状態\n");
   assert.equal(r.status, 1);
-  assert.equal(r.stdout.match(/体言止めになっていない/g).length, 4);
-  assert.match(r.stdout, /「…が無い」で終わる/);
+  assert.equal(r.stdout.match(/「状態」を足している/g).length, 2);
+  assert.match(r.stdout, /「…えない状態」/);
+  assert.equal(r.stdout.match(/です・ます調で終わっている/g).length, 1);
 });
 
 test("末尾の句点と括弧書きを除いて見て、名詞で終わる項目は通す", () => {
   const ok = run("fix: 案内の追加\n\n- 処理の追加（呼び出し元で確かめる）\n- 上限の近く\n- なし\n- 1件ずつの処理。\n- `--fix`\n");
   assert.equal(ok.status, 0, ok.stdout);
-  const ng = run("fix: 案内の追加\n\n- 処理を加える（詳しくは設計書）。\n");
+  const ng = run("fix: 処理を加える（詳しくは設計書）。\n\n- 処理の追加\n");
   assert.equal(ng.status, 1);
   assert.match(ng.stdout, /「…加える」で終わる/);
 });

@@ -13,8 +13,10 @@
 //   - バッククォートの外に、HTTP のメソッドとパスがくっついた形（GET/v1/views）が無いか。
 //     textlint の ja-no-space-around-slash は、半角どうしの間でもスラッシュの前の空白を消すので、
 //     「GET /v1/views」を書き換えてしまう。コマンドやパスはバッククォートで囲むと守られる
-//   - 1行目と箇条書きの各項目が、体言止めになっているか（「〜する」「〜が無い」「〜です」などで終わっていないか）。
+//   - 1行目が、体言止めになっているか（「〜する」「〜が無い」「〜です」などで終わっていないか）。
 //     末尾の「。」と括弧書きは除いて見る。語の形だけで判断する目安なので、名詞なのに当たるときは言い換える
+//   - 箇条書きの各項目が、述語の後ろに「状態」を足して名詞にしていないか（「〜で使えない状態」）、
+//     です・ます調で終わっていないか。箇条書きは、変更や作業を体言止めに、事実や状態を常体の用言止めにする
 //   - 本文に、箇条書きでない日本語の行（段落、表）が無いか。本文は節の見出しと箇条書きで書く。
 //     日本語を含まない行（Co-Authored-By などのトレーラー、URL、生成元の表示）とコードブロックは見ない
 //
@@ -46,6 +48,10 @@ const PREDICATE_END = /(?:[うくぐすぶむるただ]|ない|無い|しい|で
 const NOUN_END = /(?:近く|多く|遠く)$/u;
 // 末尾の句点、空白、括弧書き。
 const TRAILER = /(?:[。.\s]+|（[^（）]*）|\([^()]*\))$/u;
+// です・ます調の終わり方。箇条書きは常体で書く。
+const POLITE_END = /(?:です|ます|ました|ません|でした|ましょう|ください)$/u;
+// 述語の後ろに足して、項目を名詞で終えるための語（「〜で使えない状態」）。用言止めで言える項目なので要らない。
+const PADDING_END = /状態$/u;
 
 // 体言止めでなければ、終わりの数文字を返す。
 function predicateEnding(text) {
@@ -56,6 +62,25 @@ function predicateEnding(text) {
   }
   if (!PREDICATE_END.test(s) || NOUN_END.test(s)) return null;
   return [...s].slice(-3).join("");
+}
+
+// 箇条書きの項目の終わり方の問題。末尾の句点と括弧書きは除いて見る。
+function itemProblems(item) {
+  let s = item;
+  for (let prev = null; s !== prev; ) {
+    prev = s;
+    s = s.replace(TRAILER, "");
+  }
+  if (!JAPANESE.test(s)) return [];
+  const tail = [...s].slice(-5).join("");
+  const notes = [];
+  if (POLITE_END.test(s)) {
+    notes.push(`です・ます調で終わっている（「…${tail}」）。常体の用言止めか体言止めにする`);
+  }
+  if (PADDING_END.test(s) && predicateEnding(s.replace(PADDING_END, ""))) {
+    notes.push(`述語の後ろに「状態」を足している（「…${tail}」）。「…で使えない状態」ではなく「…で使えない」のように、用言止めで終える`);
+  }
+  return notes;
 }
 
 // East Asian Width が W（全角）または F（Fullwidth）の範囲。Unicode 15.1 の unicodedata から生成した。
@@ -145,9 +170,11 @@ function main(argv) {
     const fence = FENCE.test(line);
     if (fence) inFence = !inFence;
     const item = i === 1 ? line.replace(COMMIT_TYPE, "") : !inFence && BULLET.test(line) ? line.replace(BULLET, "") : null;
-    const ending = item === null ? null : predicateEnding(item);
-    if (ending) {
-      notes.push(`体言止めになっていない（「…${ending}」で終わる）。「〜の追加」「〜の状態」のように名詞で終える`);
+    if (i === 1) {
+      const ending = predicateEnding(item);
+      if (ending) notes.push(`1行目が体言止めになっていない（「…${ending}」で終わる）。「〜の追加」のように、変更を名詞にして終える`);
+    } else if (item !== null) {
+      notes.push(...itemProblems(item));
     }
     if (i > 1 && item === null && !fence && !inFence && !HEADING.test(line) && JAPANESE.test(line)) {
       notes.push("箇条書きになっていない（段落や表）。本文は節の見出しと箇条書きで書く");
