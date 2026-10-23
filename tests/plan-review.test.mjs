@@ -168,12 +168,33 @@ test("前の版の PLAN_REVIEW_MODEL と PLAN_REVIEW_EFFORT は読まず、新�
   assert.match(r.stdout, /PLAN_REVIEW_EFFORTは読みません/u);
 });
 
+// 必須の節を確かめるコードブロックを、plan/sample.md を対象にして実行する。
+function sections(plan) {
+  const dir = workspace([]);
+  mkdirSync(join(dir, "plan"));
+  writeFileSync(join(dir, "plan", "sample.md"), plan);
+  return runBlock(dir, block("必須の節を確かめる"), { vars: { PLAN_FILE: "plan/sample.md" } });
+}
+
+test("必須の節は、新しい2つの節と前の版の「保証の水準」の有無を示す", { skip }, () => {
+  let r = sections("# sample\n\n## 外部との入出力\n\n## 実現すること・しないこと\n");
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.equal(r.stdout, "外部との入出力: あり\n実現すること・しないこと: あり\n保証の水準: なし\n");
+
+  r = sections("# sample\n\n## 目的・背景\n\n## 保証の水準\n");
+  assert.equal(r.stdout, "外部との入出力: なし\n実現すること・しないこと: なし\n保証の水準: あり\n");
+
+  // 見出しでない行や、深い見出しは数えない。
+  r = sections("# sample\n\n外部との入出力の説明\n\n### 実現すること・しないこと\n");
+  assert.equal(r.stdout, "外部との入出力: なし\n実現すること・しないこと: なし\n保証の水準: なし\n");
+});
+
 // レビューさせるコードブロックを、plan/sample.md を対象にして実行する。
 function review(reviewer, { round = "01", env = {}, files = {} } = {}) {
   const dir = workspace(["codex", "claude"]);
   const reviewDir = "plan/.reviews/sample";
   mkdirSync(join(dir, reviewDir), { recursive: true });
-  writeFileSync(join(dir, "plan", "sample.md"), "# sample\n\n## 保証の水準\n\n- 守るもの：Planの本文\n");
+  writeFileSync(join(dir, "plan", "sample.md"), "# sample\n\n## 実現すること・しないこと\n\n- 実現すること：Planの本文\n");
   for (const [name, text] of Object.entries(files)) writeFileSync(join(dir, reviewDir, name), text);
   const r = runBlock(dir, block("レビューする側にレビューさせる"), {
     vars: { REVIEWER: reviewer, PLAN_FILE: "plan/sample.md", REVIEW_DIR: reviewDir, ROUND: round },
@@ -192,7 +213,7 @@ test("Claude には、読むツールだけを渡し、既定の opus と high �
   ]);
   const prompt = read(r.dir, "fake/claude.stdin");
   assert.match(prompt, /変更はできません/u);
-  assert.match(prompt, /守るもの：Planの本文/u);
+  assert.match(prompt, /実現すること：Planの本文/u);
   assert.equal(readFileSync(r.out, "utf8"), "1. 指摘\nVERDICT: APPROVED\n");
   assert.match(r.log, /^plan-review reviewer: claude\nplan-review model: opus\nplan-review effort: high\n/u);
 });
