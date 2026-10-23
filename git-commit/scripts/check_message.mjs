@@ -17,6 +17,7 @@
 //     末尾の「。」と括弧書きは除いて見る。語の形だけで判断する目安なので、名詞なのに当たるときは言い換える
 //   - 箇条書きの各項目が、述語の後ろに「状態」を足して名詞にしていないか（「〜で使えない状態」）、
 //     です・ます調で終わっていないか。箇条書きは、変更や作業を体言止めに、事実や状態を常体の用言止めにする
+//   - 「問題」の節の一段下げた項目（原因）が、「〜が原因」で終わっているか。上の段に問題を、下の段に原因を書く
 //   - 本文に、箇条書きでない日本語の行（段落、表）が無いか。本文は節の見出しと箇条書きで書く。
 //     日本語を含まない行（Co-Authored-By などのトレーラー、URL、生成元の表示）とコードブロックは見ない
 //
@@ -64,13 +65,19 @@ function predicateEnding(text) {
   return [...s].slice(-3).join("");
 }
 
-// 箇条書きの項目の終わり方の問題。末尾の句点と括弧書きは除いて見る。
-function itemProblems(item) {
+// 末尾の句点と括弧書きを除いた項目。
+function stripTrailer(item) {
   let s = item;
   for (let prev = null; s !== prev; ) {
     prev = s;
     s = s.replace(TRAILER, "");
   }
+  return s;
+}
+
+// 箇条書きの項目の終わり方の問題。末尾の句点と括弧書きは除いて見る。
+function itemProblems(item) {
+  const s = stripTrailer(item);
   if (!JAPANESE.test(s)) return [];
   const tail = [...s].slice(-5).join("");
   const notes = [];
@@ -160,6 +167,8 @@ function main(argv) {
   const lines = text.split("\n");
   let problems = 0;
   let inFence = false;
+  // いま読んでいる節の見出し（「## 問題」なら「問題」）。
+  let section = null;
   lines.forEach((line, idx) => {
     const i = idx + 1;
     const w = width(line);
@@ -169,12 +178,16 @@ function main(argv) {
     }
     const fence = FENCE.test(line);
     if (fence) inFence = !inFence;
+    if (!inFence && HEADING.test(line)) section = line.replace(/^\s*#+\s*/u, "").trim();
     const item = i === 1 ? line.replace(COMMIT_TYPE, "") : !inFence && BULLET.test(line) ? line.replace(BULLET, "") : null;
     if (i === 1) {
       const ending = predicateEnding(item);
       if (ending) notes.push(`1行目が体言止めになっていない（「…${ending}」で終わる）。「〜の追加」のように、変更を名詞にして終える`);
     } else if (item !== null) {
       notes.push(...itemProblems(item));
+      if (section === "問題" && /^\s+/u.test(line) && JAPANESE.test(item) && !/原因$/u.test(stripTrailer(item))) {
+        notes.push("「問題」の節の一段下げた項目は原因を書き、「〜が原因」で終える");
+      }
     }
     if (i > 1 && item === null && !fence && !inFence && !HEADING.test(line) && JAPANESE.test(line)) {
       notes.push("箇条書きになっていない（段落や表）。本文は節の見出しと箇条書きで書く");
