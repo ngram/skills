@@ -229,23 +229,23 @@ test("Claude のモデルと推論の強さは PLAN_REVIEW_CLAUDE_* で変わり
 });
 
 test("Codex には、-s read-only と -o で呼び、PLAN_REVIEW_CODEX_* を渡す", { skip }, () => {
-  const r = review("codex", { env: { PLAN_REVIEW_CODEX_MODEL: "m1", PLAN_REVIEW_CODEX_EFFORT: "high", FAKE_OUTPUT: "VERDICT: REVISE" } });
+  const r = review("codex", { env: { PLAN_REVIEW_CODEX_MODEL: "m1", PLAN_REVIEW_CODEX_EFFORT: "xhigh", FAKE_OUTPUT: "VERDICT: REVISE" } });
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.deepEqual(read(r.dir, "fake/codex.args").trim().split("\n"), [
-    "exec", "-s", "read-only", "-m", "m1", "-c", "model_reasoning_effort=high", "-o", "plan/.reviews/sample/r01_review.md.tmp", "-",
+    "exec", "-s", "read-only", "-m", "m1", "-c", "model_reasoning_effort=xhigh", "-o", "plan/.reviews/sample/r01_review.md.tmp", "-",
   ]);
   assert.equal(readFileSync(r.out, "utf8"), "VERDICT: REVISE\n");
   assert.match(r.stdout, /model: fake-codex-model/u);
-  assert.match(r.log, /^plan-review reviewer: codex\nplan-review model: m1\nplan-review effort: high\n/u);
+  assert.match(r.log, /^plan-review reviewer: codex\nplan-review model: m1\nplan-review effort: xhigh\n/u);
 });
 
-test("Codex は、PLAN_REVIEW_CODEX_* が無ければ -m と -c を渡さない", { skip }, () => {
-  const r = review("codex");
+test("Codex は、PLAN_REVIEW_CODEX_* が無ければ既定の gpt-6.1-sol と high を渡す", { skip }, () => {
+  const r = review("codex", { env: { PLAN_REVIEW_CODEX_MODEL: "", PLAN_REVIEW_CODEX_EFFORT: "" } });
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.deepEqual(read(r.dir, "fake/codex.args").trim().split("\n"), [
-    "exec", "-s", "read-only", "-o", "plan/.reviews/sample/r01_review.md.tmp", "-",
+    "exec", "-s", "read-only", "-m", "gpt-6.1-sol", "-c", "model_reasoning_effort=high", "-o", "plan/.reviews/sample/r01_review.md.tmp", "-",
   ]);
-  assert.match(r.log, /^plan-review reviewer: codex\nplan-review model: （CLIの既定）\nplan-review effort: （CLIの既定）\n/u);
+  assert.match(r.log, /^plan-review reviewer: codex\nplan-review model: gpt-6\.1-sol\nplan-review effort: high\n/u);
 });
 
 test("レビューする側が0以外で終わると、応答を残さず、出力を実行ログに移す", { skip }, () => {
