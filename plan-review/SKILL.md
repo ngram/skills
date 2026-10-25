@@ -344,18 +344,12 @@ EOF
 } > "$PROMPT_FILE"
 
 # モデルと推論の強さは、レビューする側ごとの環境変数で指定する。
-# Codexは、指定されたときだけ渡し、無ければCodex CLIの既定値を使う。Claudeの既定はopusとhigh。
-# 値が空のときに空の引数を渡さないよう、引数を配列に積む。
+# 既定は、Codexがgpt-6.1-solとhigh、Claudeがopusとhigh。
+# Codex CLIの既定に任せると、CLIが古ければ古いモデルになり、推論の強さもgpt-6.1-solの既定のlowになるので、明示して渡す。
 if [ "$REVIEWER" = "codex" ]; then
-  MODEL="${PLAN_REVIEW_CODEX_MODEL:-}"
-  EFFORT="${PLAN_REVIEW_CODEX_EFFORT:-}"
-  REVIEW_ARGS=(exec -s read-only)
-  if [ -n "$MODEL" ]; then
-    REVIEW_ARGS+=(-m "$MODEL")
-  fi
-  if [ -n "$EFFORT" ]; then
-    REVIEW_ARGS+=(-c "model_reasoning_effort=$EFFORT")
-  fi
+  MODEL="${PLAN_REVIEW_CODEX_MODEL:-gpt-6.1-sol}"
+  EFFORT="${PLAN_REVIEW_CODEX_EFFORT:-high}"
+  REVIEW_ARGS=(exec -s read-only -m "$MODEL" -c "model_reasoning_effort=$EFFORT")
 else
   MODEL="${PLAN_REVIEW_CLAUDE_MODEL:-opus}"
   EFFORT="${PLAN_REVIEW_CLAUDE_EFFORT:-high}"
@@ -367,8 +361,8 @@ fi
 # 実行ログの先頭に、レビューする側と指定したモデルを書く。
 {
   echo "plan-review reviewer: ${REVIEWER}"
-  echo "plan-review model: ${MODEL:-（CLIの既定）}"
-  echo "plan-review effort: ${EFFORT:-（CLIの既定）}"
+  echo "plan-review model: ${MODEL}"
+  echo "plan-review effort: ${EFFORT}"
   echo "----"
 } > "$REVIEW_LOG"
 
@@ -416,8 +410,8 @@ fi
 if [ "$REVIEW_STATUS" -ne 0 ]; then
   echo "=== ${REVIEWER}が終了コード${REVIEW_STATUS}で終わりました（ログ: ${REVIEW_LOG}） ==="
   if [ "$REVIEWER" = "codex" ]; then
-    echo "PLAN_REVIEW_CODEX_MODEL : ${PLAN_REVIEW_CODEX_MODEL:-（未設定）}"
-    echo "PLAN_REVIEW_CODEX_EFFORT: ${PLAN_REVIEW_CODEX_EFFORT:-（未設定）}"
+    echo "PLAN_REVIEW_CODEX_MODEL : ${PLAN_REVIEW_CODEX_MODEL:-（未設定。gpt-6.1-solを使った）}"
+    echo "PLAN_REVIEW_CODEX_EFFORT: ${PLAN_REVIEW_CODEX_EFFORT:-（未設定。highを使った）}"
   else
     echo "PLAN_REVIEW_CLAUDE_MODEL : ${PLAN_REVIEW_CLAUDE_MODEL:-（未設定。opusを使った）}"
     echo "PLAN_REVIEW_CLAUDE_EFFORT: ${PLAN_REVIEW_CLAUDE_EFFORT:-（未設定。highを使った）}"
@@ -581,13 +575,15 @@ claude.aiに入れてクラウドセッションで使うときは、`/anthropic
 | 環境変数 | 渡し方 | 設定しないとき |
 |---|---|---|
 | `PLAN_REVIEW_REVIEWER` | `codex`、`claude`、`auto`のどれか | `auto` |
-| `PLAN_REVIEW_CODEX_MODEL` | `codex exec -m <値>` | Codex CLIの既定のモデル |
-| `PLAN_REVIEW_CODEX_EFFORT` | `codex exec -c model_reasoning_effort=<値>` | Codex CLIの既定の推論の強さ |
+| `PLAN_REVIEW_CODEX_MODEL` | `codex exec -m <値>` | `gpt-6.1-sol` |
+| `PLAN_REVIEW_CODEX_EFFORT` | `codex exec -c model_reasoning_effort=<値>` | `high` |
 | `PLAN_REVIEW_CLAUDE_MODEL` | `claude -p --model <値>` | `opus`（Claude Codeの別名で、最新のOpusを指す） |
 | `PLAN_REVIEW_CLAUDE_EFFORT` | `claude -p --effort <値>` | `high` |
 
 - Codexの推論の強さは`-c`で渡すので、`~/.codex/config.toml`の`model_reasoning_effort`より優先される。`plan-review`以外でのCodexの使い方には影響しない
-- Codexの既定値はCLIを更新すると変わることがある。実際に使った値は、レビューのたびに「使ったモデル」として表示され、`rNN_review.log`の見出し（`model:`と`reasoning effort:`の行）にも残る
+- Codexの既定の`gpt-6.1-sol`は、Codex CLI 0.164.0の既定のモデルである。CLIの既定に任せないのは、CLIが古いと古いモデルになり、推論の強さも`gpt-6.1-sol`の既定の`low`になるからである。より深くレビューさせたいときは、`gpt-6-astra`を指定する
+- `gpt-6.1-sol`を知らない古いCLIで動くかは確かめていない。動かなければ、CLIを更新するか、`PLAN_REVIEW_CODEX_MODEL`で使えるモデルを指定する
+- 実際に使った値は、レビューのたびに「使ったモデル」として表示され、`rNN_review.log`の見出し（`model:`と`reasoning effort:`の行）にも残る
 - Claudeのモデルには、別名（`opus`、`sonnet`、`fable`）か、モデルの名前（`claude-opus-5-5`など）を書ける。Planを書いたセッションと違う系統のモデルでレビューさせたいときは、`fable`を指定する
 - 前の版の`PLAN_REVIEW_MODEL`と`PLAN_REVIEW_EFFORT`は読まない。設定されていると、新しい名前を案内する
 - Claudeは、`--tools "Read,Grep,Glob" --restricted --strict-mcp-config`で呼ぶ。読むツールだけを使い、利用者とプロジェクトの設定ファイル（hooksや許可の設定）とMCPサーバーを読み込まず、ファイルは作業ディレクトリの中だけを読む。リポジトリの`CLAUDE.md`も、最初には読み込まない（必要ならReadで読める）。Claude Code 2.1.302で確かめた。`--restricted`の無い古い版では`claude`が失敗するので、Claude Codeを更新する
@@ -600,7 +596,7 @@ claude.aiに入れてクラウドセッションで使うときは、`/anthropic
   "env": {
     "PLAN_REVIEW_REVIEWER": "claude",
     "PLAN_REVIEW_CLAUDE_MODEL": "fable",
-    "PLAN_REVIEW_CODEX_EFFORT": "high"
+    "PLAN_REVIEW_CODEX_MODEL": "gpt-6-astra"
   }
 }
 ```

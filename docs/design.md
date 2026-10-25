@@ -150,6 +150,7 @@ ZIPは添付しない。理由は次のとおり。
   - やり直しは、`ROUND`を1つ増やした新しい回で行う。同じ回で実行し直すと、失敗した回の実行ログが上書きされるため
   - `--reviewer codex`で明示したときは、`codex login status`が失敗しても中断せず、注意を出す。環境変数のAPIキーだけでCodexを使っているときに、ログインの確かめだけが失敗することがあるため
   - モデルと推論の強さの環境変数を、`PLAN_REVIEW_CODEX_*`と`PLAN_REVIEW_CLAUDE_*`に分けた。前の版の`PLAN_REVIEW_MODEL`と`PLAN_REVIEW_EFFORT`は読まない。Claudeの既定は`opus`と`high`
+  - Codexの既定を、CLIの既定から`gpt-6.1-sol`と`high`に変えた。CLIの既定に任せると、CLIが古いと古いモデルになり、推論の強さも`gpt-6.1-sol`の既定の`low`になるため。`gpt-6.1-sol`は、Codex CLI 0.164.0に同梱のモデルの一覧で、優先度が最も高い（既定の）モデルである
 - 前の版ではclaude.aiのサポート外（`metadata`の`claude-ai: unsupported`）だったが、その印を外した。claude.aiに入れると、クラウドセッションに同期され、`/anthropic-skills:plan-review`で呼べる。claude.aiのチャットでは、Bashと`codex`・`claude`のコマンドが無いので動かない（`compatibility`に書いた）
 
 ### japanese-tech-writing
