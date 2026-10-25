@@ -106,3 +106,12 @@ Codexのデスクトップアプリが動いていて、サンドボックスの
 - `elevated`のまま使うときは、Codexのデスクトップアプリを終了してから試す（確かめていない）
 
 `config.toml`の`[windows] sandbox`はCodex全体の設定なので、`plan-review`以外でCodexを使うときにも同じことが起きる。
+
+`unelevated`は、`elevated`より隔離が弱い。レビューの動作には影響しないが、隔離を強くしたいときは、`PLAN_REVIEW_CODEX_WINDOWS_SANDBOX`を`config`か`elevated`にする。
+
+- ネットワーク：`elevated`はファイアウォールの規則で遮断する。`unelevated`は環境の側の対策（プロキシの環境変数の差し替えなど）だけで遮断するので、プロキシの設定を無視するプログラムは通信できるおそれがある
+- 読める範囲：`elevated`は専用のアカウントで動き、権限を与えた場所だけを読む。`unelevated`は利用者本人の権限で読むので、リポジトリの外のファイル（`~/.ssh`など）も読める
+- 書き込み：`unelevated`でも`-s read-only`の書き込みの禁止は保たれる。ただし、Everyoneに書き込みを許したフォルダーには書けてしまう
+- リポジトリやPlanの中の文にレビューする側が誘導されると、リポジトリの外の秘密情報を読み、外に送るおそれがある。`elevated`なら、外に送る段階をファイアウォールで止められる
+
+ネットワークの遮断と書き込みの例外は、[Codexの文書](https://developers.openai.com/codex/windows)と第三者の解説によるもので、確かめていない。
