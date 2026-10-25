@@ -340,6 +340,7 @@ cat <<'EOF'
 指摘を番号付きリストで書いてください。最後の行は次のいずれかにしてください。
 VERDICT: APPROVED   （「重大」の指摘が無い）
 VERDICT: REVISE     （「重大」の指摘がある）
+VERDICT: UNVERIFIED （ツールのエラーで、リポジトリのファイルを読めなかった。指摘の重大度によらず、こちらにする）
 EOF
 } > "$PROMPT_FILE"
 
@@ -350,6 +351,17 @@ if [ "$REVIEWER" = "codex" ]; then
   MODEL="${PLAN_REVIEW_CODEX_MODEL:-gpt-6.1-sol}"
   EFFORT="${PLAN_REVIEW_CODEX_EFFORT:-high}"
   REVIEW_ARGS=(exec -s read-only -m "$MODEL" -c "model_reasoning_effort=$EFFORT")
+  # Windowsでは、サンドボックスの方式をunelevated（制限付きトークン）にする。elevated（サンドボックス用のユーザー）は、
+  # コマンドを起動する前の準備（setup refresh）が、Codexのデスクトップアプリが開いているファイルで失敗することがあり、
+  # そのときCodexはリポジトリを読めないまま応答を返す。-s read-onlyの書き込みの禁止は、unelevatedでも保たれる。
+  # PLAN_REVIEW_CODEX_WINDOWS_SANDBOXをconfigにすると、~/.codex/config.tomlの設定に従う。
+  case "${OS:-}:$(uname -s 2>/dev/null)" in
+    Windows_NT:*|*:MINGW*|*:MSYS*|*:CYGWIN*)
+      SANDBOX="${PLAN_REVIEW_CODEX_WINDOWS_SANDBOX:-unelevated}"
+      if [ "$SANDBOX" != "config" ]; then
+        REVIEW_ARGS+=(-c "windows.sandbox=\"$SANDBOX\"")
+      fi ;;
+  esac
 else
   MODEL="${PLAN_REVIEW_CLAUDE_MODEL:-opus}"
   EFFORT="${PLAN_REVIEW_CLAUDE_EFFORT:-high}"
@@ -363,6 +375,7 @@ fi
   echo "plan-review reviewer: ${REVIEWER}"
   echo "plan-review model: ${MODEL}"
   echo "plan-review effort: ${EFFORT}"
+  echo "plan-review args: ${REVIEW_ARGS[*]}"
   echo "----"
 } > "$REVIEW_LOG"
 
@@ -389,6 +402,18 @@ elif [ -f "$REVIEW_TMP" ]; then
   rm -f "$REVIEW_TMP"
 fi
 
+# Codexがコマンドを起動できなかった跡を探す。このときCodexは、リポジトリを読めないまま0で終わり、応答を返す。
+# 跡が見つかれば、実行ログの末尾に印を書く。ステップ5は、この印があれば応答の判定を採らない。
+# Codexはプロンプトも実行ログに書くので、プロンプトと同じ行は除いて探す。Planがエラーの文面を引いていても誤らないように。
+TOOL_FAILURE=""
+if [ "$REVIEWER" = "codex" ]; then
+  TOOL_FAILURE=$(tr -d '\r' < "$REVIEW_LOG" | grep -v -x -F -f "$PROMPT_FILE" \
+    | grep -m 1 -E '^([0-9][0-9T:.Z+-]* +)?ERROR [^ ]+: error=exec_command failed|^Failed to create unified exec process' || true)
+  if [ -n "$TOOL_FAILURE" ]; then
+    echo "plan-review tool-failure: ${TOOL_FAILURE}" >> "$REVIEW_LOG"
+  fi
+fi
+
 echo "=== レビュー結果（r${ROUND}、${REVIEWER}） ==="
 if [ -f "$REVIEW_OUT" ]; then
   cat "$REVIEW_OUT"
@@ -406,12 +431,19 @@ else
   echo "effort: ${EFFORT}"
 fi
 
+if [ -n "$TOOL_FAILURE" ]; then
+  echo "=== 注意: Codexがコマンドを起動できず、リポジトリを読めていません（ログ: ${REVIEW_LOG}） ==="
+  echo "$TOOL_FAILURE"
+  echo "PLAN_REVIEW_CODEX_WINDOWS_SANDBOX: ${PLAN_REVIEW_CODEX_WINDOWS_SANDBOX:-（未設定。Windowsではunelevatedを使った）}"
+fi
+
 # 失敗したときは、環境変数が原因かどうかを見分けられるよう、値を示す。
 if [ "$REVIEW_STATUS" -ne 0 ]; then
   echo "=== ${REVIEWER}が終了コード${REVIEW_STATUS}で終わりました（ログ: ${REVIEW_LOG}） ==="
   if [ "$REVIEWER" = "codex" ]; then
     echo "PLAN_REVIEW_CODEX_MODEL : ${PLAN_REVIEW_CODEX_MODEL:-（未設定。gpt-6.1-solを使った）}"
     echo "PLAN_REVIEW_CODEX_EFFORT: ${PLAN_REVIEW_CODEX_EFFORT:-（未設定。highを使った）}"
+    echo "PLAN_REVIEW_CODEX_WINDOWS_SANDBOX: ${PLAN_REVIEW_CODEX_WINDOWS_SANDBOX:-（未設定。Windowsではunelevatedを使った）}"
   else
     echo "PLAN_REVIEW_CLAUDE_MODEL : ${PLAN_REVIEW_CLAUDE_MODEL:-（未設定。opusを使った）}"
     echo "PLAN_REVIEW_CLAUDE_EFFORT: ${PLAN_REVIEW_CLAUDE_EFFORT:-（未設定。highを使った）}"
@@ -431,31 +463,40 @@ fi
 ### ステップ5：VERDICTを確かめる
 
 応答の最後の`VERDICT:`の行を読む。応答の末尾に空行や補足が付いていても読み取れる。
-`APPROVED`と`REVISE`の直後は、空白か行末に限る。`VERDICT: APPROVED_UNKNOWN`のような行をAPPROVEDと読まないためである。
+`APPROVED`、`REVISE`、`UNVERIFIED`の直後は、空白か行末に限る。`VERDICT: APPROVED_UNKNOWN`のような行をAPPROVEDと読まないためである。
+実行ログに、Codexがコマンドを起動できなかった印（ステップ4）があれば、応答の判定によらずUNVERIFIEDにする。
 
 ```bash
+# VERDICTを確かめる
 VERDICT_LINE=""
 if [ -f "$REVIEW_OUT" ]; then
   VERDICT_LINE=$(tr -d '\r' < "$REVIEW_OUT" | grep '^VERDICT:' | tail -1)
 fi
 VERDICT=UNKNOWN
-if [[ $VERDICT_LINE =~ ^VERDICT:\ (APPROVED|REVISE)([[:space:]]|$) ]]; then
+if [[ $VERDICT_LINE =~ ^VERDICT:\ (APPROVED|REVISE|UNVERIFIED)([[:space:]]|$) ]]; then
   VERDICT="${BASH_REMATCH[1]}"
 fi
-echo "判定: ${VERDICT}（${VERDICT_LINE:-VERDICTの行がありません}）"
+TOOL_FAILURE=$(grep -m 1 '^plan-review tool-failure: ' "$REVIEW_LOG" 2>/dev/null || true)
+if [ -f "$REVIEW_OUT" ] && [ -n "$TOOL_FAILURE" ]; then
+  VERDICT=UNVERIFIED
+  echo "判定: ${VERDICT}（応答の行は「${VERDICT_LINE:-なし}」だが、実行ログに、コマンドを起動できなかった跡がある）"
+else
+  echo "判定: ${VERDICT}（${VERDICT_LINE:-VERDICTの行がありません}）"
+fi
 ```
 
 次の条件を上から順に当てはめ、最初に当たったものに従う。
 
 1. **APPROVED**（「重大」の指摘が無い）：ステップ6へ進む。「中」や「軽微」の指摘が残っていても、レビューは終える
-2. **UNKNOWN**（`rNN_review.md`が無い、`VERDICT:`の行が無い、またはAPPROVEDとREVISEのどちらでもない。レビューする側が0以外で終わったときは、`rNN_review.md`が無い）：ユーザーに確認を求める。やり直すときは、新しい回で行う（ステップ4のやり直しの決まり）
-3. **REVISE**で、応答のあった回（`rNN_review.md`か`rNN_codex.md`がある回）が今回で3回目以降：残った指摘と、これまでの`rNN_triage.md`の表をユーザーに見せ、判断を委ねる。続けると言われなければ、ステップ6へ進む
-4. **REVISE**で、収束していない兆候がある：「実現すること・しないこと」の見直しをユーザーに提案し、ステップ6へ進む。兆候とは、次の2つがどちらも当てはまることを言う。前回の`rNN_triage.md`が無ければ、この条件は当てはめない
+2. **UNVERIFIED**（レビューする側がリポジトリのファイルを読めなかった。応答の最後の行が`VERDICT: UNVERIFIED`か、Codexの実行ログにコマンドを起動できなかった跡がある）：指摘はPlanの記述だけに基づくので、判定を採らず、Planも直さない。Codexの跡があれば、ステップ4で示した跡と、`README.md`の「WindowsでCodexがリポジトリを読めないとき」の対処を、跡が無ければ、応答に書かれた読めなかった理由をユーザーに伝え、やり直すかを確かめる。やり直すときは、新しい回で行う（ステップ4のやり直しの決まり）
+3. **UNKNOWN**（`rNN_review.md`が無い、`VERDICT:`の行が無い、またはAPPROVED、REVISE、UNVERIFIEDのどれでもない。レビューする側が0以外で終わったときは、`rNN_review.md`が無い）：ユーザーに確認を求める。やり直すときは、新しい回で行う（ステップ4のやり直しの決まり）
+4. **REVISE**で、応答のあった回（`rNN_review.md`か`rNN_codex.md`がある回）が今回で3回目以降：残った指摘と、これまでの`rNN_triage.md`の表をユーザーに見せ、判断を委ねる。続けると言われなければ、ステップ6へ進む
+5. **REVISE**で、収束していない兆候がある：「実現すること・しないこと」の見直しをユーザーに提案し、ステップ6へ進む。兆候とは、次の2つがどちらも当てはまることを言う。前回の`rNN_triage.md`が無ければ、この条件は当てはめない
    - 今回の「重大」の指摘が、どれも前回の修正で足した仕組み（前回の`rNN_triage.md`の「足した仕組み」）の細部に関するものである。これは、Claudeがここで今回の応答と前回の`rNN_triage.md`を見比べて判断する。ステップ5aの仕分けは待たない
    - 前回の`rNN_triage.md`の集計で、「「重大」の指摘が、どれも直前の修正で足した仕組みの細部か」が「はい」である
-5. **REVISE**：ステップ5aへ進む
+6. **REVISE**：ステップ5aへ進む
 
-条件3か4でステップ6へ進んだときは、APPROVEDで終えたのではなく、「重大」の指摘が残っていることをユーザーに伝える。
+条件4か5でステップ6へ進んだときは、APPROVEDで終えたのではなく、「重大」の指摘が残っていることをユーザーに伝える。
 
 #### ステップ5a：指摘を仕分けしてからPlanを直す（REVISEのときだけ）
 
@@ -577,13 +618,15 @@ claude.aiに入れてクラウドセッションで使うときは、`/anthropic
 | `PLAN_REVIEW_REVIEWER` | `codex`、`claude`、`auto`のどれか | `auto` |
 | `PLAN_REVIEW_CODEX_MODEL` | `codex exec -m <値>` | `gpt-6.1-sol` |
 | `PLAN_REVIEW_CODEX_EFFORT` | `codex exec -c model_reasoning_effort=<値>` | `high` |
+| `PLAN_REVIEW_CODEX_WINDOWS_SANDBOX` | Windowsでの`codex exec -c windows.sandbox="<値>"`（`config`のときは渡さず、`config.toml`の設定） | `unelevated` |
 | `PLAN_REVIEW_CLAUDE_MODEL` | `claude -p --model <値>` | `opus`（Claude Codeの別名で、最新のOpusを指す） |
 | `PLAN_REVIEW_CLAUDE_EFFORT` | `claude -p --effort <値>` | `high` |
 
 - Codexの推論の強さは`-c`で渡すので、`~/.codex/config.toml`の`model_reasoning_effort`より優先される。`plan-review`以外でのCodexの使い方には影響しない
 - Codexの既定の`gpt-6.1-sol`は、Codex CLI 0.164.0の既定のモデルである。CLIの既定に任せないのは、CLIが古いと古いモデルになり、推論の強さも`gpt-6.1-sol`の既定の`low`になるからである。より深くレビューさせたいときは、`gpt-6-astra`を指定する
 - `gpt-6.1-sol`を知らない古いCLIで動くかは確かめていない。動かなければ、CLIを更新するか、`PLAN_REVIEW_CODEX_MODEL`で使えるモデルを指定する
-- 実際に使った値は、レビューのたびに「使ったモデル」として表示され、`rNN_review.log`の見出し（`model:`と`reasoning effort:`の行）にも残る
+- 実際に使った値は、レビューのたびに「使ったモデル」として表示され、`rNN_review.log`の見出し（`model:`と`reasoning effort:`の行）にも残る。`codex`と`claude`に渡した引数は、`rNN_review.log`の先頭の`plan-review args:`の行に残る
+- Windowsでは、Codexのサンドボックスの方式を既定で`unelevated`（制限付きトークン）にする。`elevated`（`config.toml`の`[windows] sandbox = "elevated"`）では、Codexのデスクトップアプリが動いているとコマンドを起動できず、リポジトリを読めないことがあるためである。`-s read-only`の書き込みの禁止は保たれる。Windowsかどうかは環境変数`OS`と`uname -s`で見分け、WSLでは渡さない。詳しくは`README.md`の「WindowsでCodexがリポジトリを読めないとき」にある
 - Claudeのモデルには、別名（`opus`、`sonnet`、`fable`）か、モデルの名前（`claude-opus-5-5`など）を書ける。Planを書いたセッションと違う系統のモデルでレビューさせたいときは、`fable`を指定する
 - 前の版の`PLAN_REVIEW_MODEL`と`PLAN_REVIEW_EFFORT`は読まない。設定されていると、新しい名前を案内する
 - Claudeは、`--tools "Read,Grep,Glob" --restricted --strict-mcp-config`で呼ぶ。読むツールだけを使い、利用者とプロジェクトの設定ファイル（hooksや許可の設定）とMCPサーバーを読み込まず、ファイルは作業ディレクトリの中だけを読む。リポジトリの`CLAUDE.md`も、最初には読み込まない（必要ならReadで読める）。Claude Code 2.1.302で確かめた。`--restricted`の無い古い版では`claude`が失敗するので、Claude Codeを更新する

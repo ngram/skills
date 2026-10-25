@@ -35,6 +35,14 @@ if [ "$1 $2" = "login status" ]; then
 fi
 printf '%s\\n' "$@" > "$FAKE_DIR/codex.args"
 cat > "$FAKE_DIR/codex.stdin"
+# 本物の codex と同じく、プロンプトを標準エラー出力に書けるようにする。
+if [ -n "\${FAKE_ECHO_PROMPT:-}" ]; then
+  echo "user" >&2
+  cat "$FAKE_DIR/codex.stdin" >&2
+fi
+if [ -n "\${FAKE_STDERR:-}" ]; then
+  printf '%s\\n' "$FAKE_STDERR" >&2
+fi
 OUT=""
 while [ $# -gt 0 ]; do
   if [ "$1" = "-o" ]; then OUT="$2"; shift; fi
@@ -54,13 +62,18 @@ fi
 exit "\${FAKE_STATUS:-0}"
 `;
 
-// 一時的なディレクトリを作り、偽のコマンドを fakebin/ に置く。commands は置くコマンドの名前。
+// 偽の uname。テストを動かす OS によらず、FAKE_UNAME（既定は Linux）を返す。
+const FAKE_UNAME = `#!/bin/bash
+echo "\${FAKE_UNAME:-Linux}"
+`;
+
+// 一時的なディレクトリを作り、偽のコマンドを fakebin/ に置く。commands は置くコマンドの名前。uname は常に置く。
 function workspace(commands) {
   const dir = mkdtempSync(join(tmpdir(), "plan-review-"));
   mkdirSync(join(dir, "fakebin"));
   mkdirSync(join(dir, "fake"));
-  for (const [name, body] of [["codex", FAKE_CODEX], ["claude", FAKE_CLAUDE]]) {
-    if (!commands.includes(name)) continue;
+  for (const [name, body] of [["codex", FAKE_CODEX], ["claude", FAKE_CLAUDE], ["uname", FAKE_UNAME]]) {
+    if (name !== "uname" && !commands.includes(name)) continue;
     writeFileSync(join(dir, "fakebin", name), body);
     chmodSync(join(dir, "fakebin", name), 0o755);
   }
@@ -68,13 +81,14 @@ function workspace(commands) {
 }
 
 // コードブロックを bash で実行する。vars は実行の前に設定するシェルの変数、env は環境変数。
+// Windows の判定が、テストを動かす OS で変わらないよう、環境変数 OS は空にする（env で上書きできる）。
 function runBlock(dir, script, { vars = {}, env = {} } = {}) {
   const preset = Object.entries(vars).map(([k, v]) => `${k}='${v}'`).join("\n");
   const body = `export PATH="$PWD/fakebin:/usr/bin:/bin"\nexport FAKE_DIR="$PWD/fake"\n${preset}\n${script}\n`;
   const file = join(dir, "run.sh");
   writeFileSync(file, body);
   const clean = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("PLAN_REVIEW_")));
-  return spawnSync(BASH, ["run.sh"], { cwd: dir, encoding: "utf8", env: { ...clean, ...env } });
+  return spawnSync(BASH, ["run.sh"], { cwd: dir, encoding: "utf8", env: { ...clean, OS: "", ...env } });
 }
 
 const read = (dir, path) => readFileSync(join(dir, path), "utf8");
@@ -190,11 +204,11 @@ test("必須の節は、新しい2つの節と前の版の「保証の水準」�
 });
 
 // レビューさせるコードブロックを、plan/sample.md を対象にして実行する。
-function review(reviewer, { round = "01", env = {}, files = {} } = {}) {
+function review(reviewer, { round = "01", env = {}, files = {}, plan = "" } = {}) {
   const dir = workspace(["codex", "claude"]);
   const reviewDir = "plan/.reviews/sample";
   mkdirSync(join(dir, reviewDir), { recursive: true });
-  writeFileSync(join(dir, "plan", "sample.md"), "# sample\n\n## 実現すること・しないこと\n\n- 実現すること：Planの本文\n");
+  writeFileSync(join(dir, "plan", "sample.md"), `# sample\n\n## 実現すること・しないこと\n\n- 実現すること：Planの本文\n${plan}`);
   for (const [name, text] of Object.entries(files)) writeFileSync(join(dir, reviewDir, name), text);
   const r = runBlock(dir, block("レビューする側にレビューさせる"), {
     vars: { REVIEWER: reviewer, PLAN_FILE: "plan/sample.md", REVIEW_DIR: reviewDir, ROUND: round },
@@ -246,6 +260,76 @@ test("Codex は、PLAN_REVIEW_CODEX_* が無ければ既定の gpt-6.1-sol と h
     "exec", "-s", "read-only", "-m", "gpt-6.1-sol", "-c", "model_reasoning_effort=high", "-o", "plan/.reviews/sample/r01_review.md.tmp", "-",
   ]);
   assert.match(r.log, /^plan-review reviewer: codex\nplan-review model: gpt-6\.1-sol\nplan-review effort: high\n/u);
+});
+
+test("Windows では、Codex のサンドボックスを unelevated にし、PLAN_REVIEW_CODEX_WINDOWS_SANDBOX で変えられる", { skip }, () => {
+  const sandboxArgs = (r) => read(r.dir, "fake/codex.args").split("\n").filter((a) => a.startsWith("windows.sandbox="));
+  let r = review("codex", { env: { OS: "Windows_NT" } });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.deepEqual(sandboxArgs(r), ['windows.sandbox="unelevated"']);
+  assert.match(r.log, /^plan-review args: exec -s read-only -m gpt-6\.1-sol -c model_reasoning_effort=high -c windows\.sandbox="unelevated"$/mu);
+
+  r = review("codex", { env: { FAKE_UNAME: "MINGW64_NT-10.0-26300" } });
+  assert.deepEqual(sandboxArgs(r), ['windows.sandbox="unelevated"'], "OS が空でも uname で見分ける");
+
+  r = review("codex", { env: { OS: "Windows_NT", PLAN_REVIEW_CODEX_WINDOWS_SANDBOX: "elevated" } });
+  assert.deepEqual(sandboxArgs(r), ['windows.sandbox="elevated"']);
+
+  r = review("codex", { env: { OS: "Windows_NT", PLAN_REVIEW_CODEX_WINDOWS_SANDBOX: "config" } });
+  assert.deepEqual(sandboxArgs(r), [], "config のときは config.toml に従う");
+
+  r = review("codex", { env: { PLAN_REVIEW_CODEX_WINDOWS_SANDBOX: "elevated" } });
+  assert.deepEqual(sandboxArgs(r), [], "Windows でなければ渡さない");
+});
+
+// Windows で elevated のサンドボックスの準備に失敗したときの、codex の出力（利用者の実行ログから）。
+const TOOL_FAILURE_LOG = [
+  "exec",
+  `"C:\\\\Program Files\\\\PowerShell\\\\7\\\\pwsh.exe" -Command 'rg -n "x" main.go' in C:\\work\\temoto`,
+  " exited -1 in 0ms:",
+  "Failed to create unified exec process: helper_unknown_error: setup refresh had errors",
+  'ERROR codex_core::tools::router: error=exec_command failed: CreateProcess { message: "Rejected(\\"Failed to create unified exec process: helper_unknown_error: setup refresh had errors\\")" }',
+].join("\n");
+
+test("Codex がコマンドを起動できなかった跡があれば、実行ログに印を書き、注意を出す", { skip }, () => {
+  let r = review("codex", { env: { OS: "Windows_NT", FAKE_STDERR: TOOL_FAILURE_LOG, FAKE_OUTPUT: "読めなかった。\nVERDICT: APPROVED" } });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.ok(existsSync(r.out), "応答は残す");
+  assert.match(r.log, /^plan-review tool-failure: Failed to create unified exec process: helper_unknown_error: setup refresh had errors$/mu);
+  assert.match(r.stdout, /注意: Codexがコマンドを起動できず、リポジトリを読めていません/u);
+  assert.match(r.stdout, /PLAN_REVIEW_CODEX_WINDOWS_SANDBOX: （未設定。Windowsではunelevatedを使った）/u);
+
+  r = review("codex", { env: { FAKE_STDERR: TOOL_FAILURE_LOG.split("\n").at(-1) } });
+  assert.match(r.log, /^plan-review tool-failure: ERROR codex_core::tools::router: error=exec_command failed/mu, "ERROR の行だけでも見つける");
+
+  r = review("codex", {
+    plan: "\n## 背景\n\nFailed to create unified exec process: helper_unknown_error\n",
+    env: { FAKE_ECHO_PROMPT: "1", FAKE_STDERR: "exec\nrg -n x main.go\n succeeded in 10ms:" },
+  });
+  assert.match(r.log, /^Failed to create unified exec process/mu, "プロンプトの写しが実行ログにある");
+  assert.doesNotMatch(r.log, /^plan-review tool-failure:/mu, "プロンプトの中のエラーの文面は跡とみなさない");
+  assert.doesNotMatch(r.stdout, /注意: Codexがコマンドを起動できず/u);
+});
+
+// 判定のコードブロックを、応答と実行ログを置いて実行し、判定を返す。
+function verdict(response, log = "") {
+  const dir = workspace([]);
+  if (response !== null) writeFileSync(join(dir, "out.md"), response);
+  writeFileSync(join(dir, "out.log"), log);
+  const r = runBlock(dir, block("VERDICTを確かめる"), { vars: { REVIEW_OUT: "out.md", REVIEW_LOG: "out.log" } });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  return r.stdout.match(/^判定: (\S+?)（/mu)?.[1];
+}
+
+test("判定は APPROVED、REVISE、UNVERIFIED を読み、実行ログに印があれば UNVERIFIED にする", { skip }, () => {
+  assert.equal(verdict("指摘\nVERDICT: APPROVED\n\n補足\n"), "APPROVED");
+  assert.equal(verdict("指摘\r\nVERDICT: REVISE\r\n"), "REVISE");
+  assert.equal(verdict("読めなかった。\nVERDICT: UNVERIFIED\n"), "UNVERIFIED");
+  assert.equal(verdict("VERDICT: APPROVED_UNKNOWN\n"), "UNKNOWN");
+  assert.equal(verdict("指摘のみ\n"), "UNKNOWN");
+  const marked = "plan-review reviewer: codex\n----\nplan-review tool-failure: Failed to create unified exec process: x\n";
+  assert.equal(verdict("VERDICT: APPROVED\n", marked), "UNVERIFIED");
+  assert.equal(verdict(null, marked), "UNKNOWN", "応答が無ければ UNKNOWN のまま");
 });
 
 test("レビューする側が0以外で終わると、応答を残さず、出力を実行ログに移す", { skip }, () => {

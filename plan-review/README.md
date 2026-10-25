@@ -92,3 +92,17 @@ printenv OPENAI_API_KEY | codex login --with-api-key
 APIキーは、Network secretsではなく環境変数に入れる。Network secretsのキーが、送信のときにプロキシが差し込む方式だと、Setup scriptの`printenv`では読めず、`codex login`が失敗する（確かめていない）。
 
 設定しないときは、Claudeでレビューする。
+
+## WindowsでCodexがリポジトリを読めないとき
+
+Codexのサンドボックスを`elevated`（`~/.codex/config.toml`の`[windows] sandbox = "elevated"`）にしていると、Codexがコマンドを1つも起動できず、リポジトリを読めないことがある。
+このときCodexは終了コード0で、Planの記述だけに基づく応答を返す。
+Codexのデスクトップアプリが動いていて、サンドボックスの準備（setup refresh）で検証するファイルを開いていることが原因と見ている（デスクトップアプリを止めて確かめてはいない）。
+
+- `plan-review`は、Windowsでは既定でサンドボックスを`unelevated`（`-c windows.sandbox="unelevated"`）にしてCodexを呼ぶ。`-s read-only`による書き込みの禁止は保たれる
+- `config.toml`の設定に従わせるときは、環境変数`PLAN_REVIEW_CODEX_WINDOWS_SANDBOX`を`config`にする。`elevated`などのほかの値を書くと、その値を渡す
+- 実行ログ（`rNN_review.log`）にコマンドを起動できなかった跡（`exec_command failed`か`Failed to create unified exec process`の行）があると、応答の判定を採らず、`UNVERIFIED`としてユーザーに確かめる
+- 原因は`~/.codex/.sandbox/sandbox.<日付>.log`で確かめられる。`setup refresh had errors`の行の前に、準備に失敗したファイルと理由（「別のプロセスが使用中」など）が出る
+- `elevated`のまま使うときは、Codexのデスクトップアプリを終了してから試す（確かめていない）
+
+`config.toml`の`[windows] sandbox`はCodex全体の設定なので、`plan-review`以外でCodexを使うときにも同じことが起きる。
