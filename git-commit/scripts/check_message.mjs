@@ -18,6 +18,9 @@
 //   - 箇条書きの各項目が、述語の後ろに「状態」を足して名詞にしていないか（「〜で使えない状態」）、
 //     です・ます調で終わっていないか。箇条書きは、変更や作業を体言止めに、事実や状態を常体の用言止めにする
 //   - 「問題」の節の一段下げた項目（原因）が、「〜が原因」で終わっているか。上の段に問題を、下の段に原因を書く
+//   - 問題が2つ以上あるとき、問題が上から順に「A: 」「B: 」…で始まっているか。「対応」の項目がすべて、
+//     定義したラベルを指す小見出し（### A: …、### A・B: …）か「### その他の変更」の下にあり、
+//     どの問題にも小見出しがあるか。問題が1つのときに、ラベルを付けていないか
 //   - 本文に、箇条書きでない日本語の行（段落、表）が無いか。本文は節の見出しと箇条書きで書く。
 //     日本語を含まない行（Co-Authored-By などのトレーラー、URL、生成元の表示）とコードブロックは見ない
 //
@@ -53,6 +56,13 @@ const TRAILER = /(?:[。.\s]+|（[^（）]*）|\([^()]*\))$/u;
 const POLITE_END = /(?:です|ます|ました|ません|でした|ましょう|ください)$/u;
 // 述語の後ろに足して、項目を名詞で終えるための語（「〜で使えない状態」）。用言止めで言える項目なので要らない。
 const PADDING_END = /状態$/u;
+// 節の見出し（「## 問題」）。「### A: …」の小見出しは節を変えない。
+const SECTION = /^\s*#{1,2}(?!#)\s*(.*)$/u;
+const SUB_HEADING = /^\s*###(?!#)\s*(.*)$/u;
+// 問題のラベル（「A: 」「A・B: 」）。問題が2つ以上あるときに、問題と対応の小見出しを結び付ける。
+const LABEL = /^([A-Z](?:・[A-Z])*):\s+/u;
+// どの問題にも当たらない対応をまとめる小見出し。
+const OTHER_CHANGES = "その他の変更";
 
 // 体言止めでなければ、終わりの数文字を返す。
 function predicateEnding(text) {
@@ -86,6 +96,80 @@ function itemProblems(item) {
   }
   if (PADDING_END.test(s) && predicateEnding(s.replace(PADDING_END, ""))) {
     notes.push(`述語の後ろに「状態」を足している（「…${tail}」）。「…で使えない状態」ではなく「…で使えない」のように、用言止めで終える`);
+  }
+  return notes;
+}
+
+// 問題のラベルと「対応」の小見出しの問題を、行の番号（0始まり）ごとに返す。
+function labelProblems(lines) {
+  const notes = new Map();
+  const add = (idx, note) => notes.set(idx, [...(notes.get(idx) ?? []), note]);
+  const problems = [];
+  const headings = [];
+  const looseItems = [];
+  let actionLine = null;
+  let inFence = false;
+  let section = null;
+  let underHeading = false;
+  lines.forEach((line, idx) => {
+    if (idx === 0) return;
+    if (FENCE.test(line)) inFence = !inFence;
+    if (inFence) return;
+    const s = line.match(SECTION);
+    if (s) {
+      section = s[1].trim();
+      underHeading = false;
+      if (section === "対応") actionLine = idx;
+      return;
+    }
+    const sub = line.match(SUB_HEADING);
+    const topItem = BULLET.test(line) && !/^\s/u.test(line);
+    if (section === "問題" && topItem) {
+      problems.push({ idx, text: line.replace(BULLET, "") });
+    } else if (section === "対応" && sub) {
+      underHeading = true;
+      headings.push({ idx, text: sub[1].trim() });
+    } else if (section === "対応" && topItem && !underHeading) {
+      looseItems.push(idx);
+    }
+  });
+
+  const letters = problems.map((_, k) => String.fromCharCode(0x41 + k));
+  if (problems.length < 2) {
+    for (const p of problems) {
+      if (LABEL.test(p.text)) add(p.idx, "問題が1つのときは、ラベル（「A: 」）を付けない");
+    }
+    for (const h of headings) {
+      if (LABEL.test(h.text)) add(h.idx, "問題が1つ以下のときは、「対応」の小見出しにラベルを付けない");
+    }
+    return notes;
+  }
+  problems.forEach((p, k) => {
+    const m = p.text.match(LABEL);
+    if (!m || m[1] !== letters[k]) {
+      add(p.idx, `問題が2つ以上あるときは、上から順に「A: 」「B: 」…で始める（ここは「${letters[k]}: 」）`);
+    }
+  });
+  const used = new Set();
+  for (const h of headings) {
+    if (h.text === OTHER_CHANGES) continue;
+    const m = h.text.match(LABEL);
+    if (!m || !h.text.slice(m[0].length).trim()) {
+      add(h.idx, `「対応」の小見出しは「### A: <見出し>」「### A・B: <見出し>」か「### ${OTHER_CHANGES}」にする`);
+      continue;
+    }
+    for (const l of m[1].split("・")) {
+      if (letters.includes(l)) used.add(l);
+      else add(h.idx, `問題${l}が無い。小見出しのラベルは、「問題」の節で付けたものにする`);
+    }
+  }
+  for (const idx of looseItems) {
+    add(idx, "問題が2つ以上あるときは、「対応」の項目を、どの問題への対応かを示す小見出し（「### A: …」）の下に置く");
+  }
+  if (actionLine !== null) {
+    for (const l of letters) {
+      if (!used.has(l)) add(actionLine, `問題${l}への対応の小見出し（「### ${l}: …」）が無い`);
+    }
   }
   return notes;
 }
@@ -169,6 +253,7 @@ function main(argv) {
   let inFence = false;
   // いま読んでいる節の見出し（「## 問題」なら「問題」）。
   let section = null;
+  const labelNotes = labelProblems(lines);
   lines.forEach((line, idx) => {
     const i = idx + 1;
     const w = width(line);
@@ -178,7 +263,8 @@ function main(argv) {
     }
     const fence = FENCE.test(line);
     if (fence) inFence = !inFence;
-    if (!inFence && HEADING.test(line)) section = line.replace(/^\s*#+\s*/u, "").trim();
+    const s = inFence ? null : line.match(SECTION);
+    if (s) section = s[1].trim();
     const item = i === 1 ? line.replace(COMMIT_TYPE, "") : !inFence && BULLET.test(line) ? line.replace(BULLET, "") : null;
     if (i === 1) {
       const ending = predicateEnding(item);
@@ -189,6 +275,7 @@ function main(argv) {
         notes.push("「問題」の節の一段下げた項目は原因を書き、「〜が原因」で終える");
       }
     }
+    notes.push(...(labelNotes.get(idx) ?? []));
     if (i > 1 && item === null && !fence && !inFence && !HEADING.test(line) && JAPANESE.test(line)) {
       notes.push("箇条書きになっていない（段落や表）。本文は節の見出しと箇条書きで書く");
     }
@@ -197,7 +284,9 @@ function main(argv) {
     }
     const prefix = i === 1 ? COMMIT_TYPE : MARKER;
     const m = line.match(prefix);
-    const body = m ? line.slice(m[0].length) : line;
+    let body = m ? line.slice(m[0].length) : line;
+    // 問題のラベルと小見出しの「A: 」は、後ろに全角文字が続いても空白を見ない。
+    if (i > 1 && m) body = body.replace(LABEL, "");
     const outsideCode = body.replace(CODE_SPAN, "");
     notes.push(...spaceProblems(outsideCode));
     for (const g of outsideCode.matchAll(GLUED_METHOD)) {
