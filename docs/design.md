@@ -7,7 +7,8 @@ zipを展開した3つのSkillを、1つのGitHubリポジトリ（`ngram/skills
 
 | Skill | ファイル | 作者・ライセンス | 実行に必要なもの |
 |---|---|---|---|
-| `git-commit` | `SKILL.md`、`scripts/check_message.mjs`、`scripts/check_spelling.mjs`、`assets/gitmessage` | ngram・MIT | git、Node.js 18以降。スペルの確認にはtypos |
+| `git-commit` | `SKILL.md`、`scripts/check_message.mjs`、`assets/gitmessage` | ngram・MIT | git、Node.js 18以降。スペルの確認には`spell-check` |
+| `spell-check` | `SKILL.md`、`scripts/check_spelling.mjs` | ngram・MIT | Node.js 18以降、typos。ステージした内容の確認にはgit |
 | `japanese-tech-writing` | `SKILL.md`、`scripts/fix_spacing.mjs`、`LICENSE.txt`、`LICENSE-MIT.txt` | keiichiro shikano・Unlicense（ngram/skillsで足した部分はngram・MIT） | なし（スクリプトにはNode.js 18以降） |
 | `plan-review` | `SKILL.md` | ngram・MIT | bash、codex CLIかclaude CLI |
 
@@ -61,8 +62,11 @@ ZIPは添付しない。理由は次のとおり。
 │   ├── SKILL.md
 │   ├── README.md               インストール手順のブロックを生成する
 │   ├── scripts/check_message.mjs
-│   ├── scripts/check_spelling.mjs  ステージした内容とメッセージの下書きの、typosでの綴りの確認
 │   └── assets/gitmessage
+├── spell-check/
+│   ├── SKILL.md
+│   ├── scripts/check_spelling.mjs  ステージした内容と指定したファイルの、typosでの綴りの確認
+│   └── README.md
 ├── japanese-tech-writing/
 │   ├── SKILL.md                取り込み元のgistの行は変えず、末尾に節を足す
 │   ├── scripts/fix_spacing.mjs 日本語と英数字の間の空白の検査と修正
@@ -138,11 +142,16 @@ ZIPは添付しない。理由は次のとおり。
 - 箇条書きの終え方の、変更や作業は体言止め、事実や状態は常体の用言止めへの変更。すべての項目に体言止めを求めると、「〜で使えない状態」のように、述語の後ろに「状態」を足した項目が増えたため。`check_message.mjs`は、体言止めを1行目だけに求め、箇条書きでは、述語の後ろに足した「状態」と、です・ます調を指摘する。`readme-writing`のREADMEの箇条書きも同じ規則にし、`readme_stats.mjs`も同じ形を指摘する（表のセルは体言止めのまま）
 - 「問題」の節の、問題（何が起きていて、何が困るか）と、一段下げた原因（「〜が原因」）への分け方の追加。起きていることだけを並べると、何が困るのかと、どれが原因なのかが読み取れなかったため。`check_message.mjs`は、「問題」の節の一段下げた項目が「〜が原因」で終わっているかを見る
 - 問題が2つ以上あるときの、問題のラベル（`A: `、`B: `…）と、「対応」の節のラベルごとの小見出し（`### A: <見出し>`、共通の対応は`### A・B: <見出し>`、どの問題にも当たらない変更は`### その他の変更`）の追加。「対応」の項目が、どの問題への対応なのかを読み取れなかったため。「テスト」と「影響」の節はラベルで分けない。`check_message.mjs`は、ラベルが上から順に付いているか、小見出しが定義したラベルを指しているか、どの問題にも小見出しがあるかを見る。ラベルの`: `の後ろの空白は、全角文字との間の空白の検査から外す
-- typosによるスペルの確認（`scripts/check_spelling.mjs`）の追加。英単語の綴りの誤りが、ステージしたファイルにも、メッセージ案とプルリクエストの本文にも残ったまま入っていたため
+- `spell-check`のSkillでの、ステージしたファイルとメッセージ案、プルリクエストの本文の綴りの確認の追加（入っていれば）。英単語の綴りの誤りが、残ったまま入っていたため。一部だけステージしたファイルの誤字を直さないことと、変更していない行の誤字も直すことは、コミットに固有の決まりなので、このSkillに残した
+
+### spell-check
+
+- typosによるスペルの確認（`scripts/check_spelling.mjs`）のSkillとしての新設。初めは`git-commit`に同梱していたが、`readme-writing`、`plan-create`、`japanese-tech-writing`でも書いたファイルを確かめるため、指摘の扱いと辞書への登録の手順と一緒に切り出した。4つのSkillは、`japanese-tech-writing`の`fix_spacing.mjs`と同じく「入っていれば読み込んで使う」形で呼ぶ
+  - `files`は、作業ツリーのファイルを、作業ツリーの設定ファイルと一緒に一時ディレクトリに写して確かめる。今いるリポジトリの中のファイルには最寄りの設定が、外のファイル（スクラッチパッドの下書き）には直下の設定が効く。外のファイルは1つずつ別のディレクトリに写し、名前がぶつからないようにする。初めの`message`（インデックスの直下の設定で下書きを1つ確かめる）は、これに置き換えた
   - `staged`は、ステージした内容を`git cat-file --batch`で一時ディレクトリに書き出してから確かめる。作業ツリーのパスを渡すと、作業ツリーで削除したファイルでtyposが失敗し、一部だけステージしたファイルでは作業ツリーの内容を確かめてしまう。`git checkout-index`はsmudgeフィルターと改行の変換をかけるので使わない
   - typosの設定ファイルもインデックスから写す。一時ディレクトリの直下に設定が無ければ、空の`_typos.toml`を置いて、一時ディレクトリの外（ホームなど）の設定までさかのぼらないようにする
   - typosには、ディレクトリではなくファイルのパスを渡す。typosは渡したパスごとに設定を探すので、ディレクトリを渡すとサブディレクトリの設定が読まれない
-  - Skillが直すのは、ソースコードのコメントと文書の文章の誤字に限る。識別子、文字列、コードブロックの誤字は、直すと参照が崩れることがあるので、確認してほしい点としてユーザーに示す
+  - 直すのは、ソースコードのコメントと文書の文章の誤字に限る。識別子、文字列、コードブロックの誤字は、直すと参照が崩れることがあるので、確認してほしい点としてユーザーに示す
   - 確認してほしい点の語は、リポジトリのtyposの設定ファイルに登録できる（ユーザー辞書）。既存の名前は`extend-identifiers`ではなく`extend-ignore-re`に登録する。typosは`-`と`.`で語を区切ってから照らし合わせるので、`-`や`.`を含む名前が`extend-identifiers`では通らないため
   - typosが無い環境では、入れるかをユーザーに尋ね、断られたら確認を飛ばす。尋ねずに入れないのは、ユーザーの環境にソフトウェアを足すことになるため。CIでは`REQUIRE_TYPOS=1`にして、テストが黙って飛ばされないようにする
 
@@ -176,6 +185,7 @@ ZIPは添付しない。理由は次のとおり。
 - 末尾への「見出しと用語の逐語訳」と「手順の書き方」の節の追加（HTMLのコメントの下、「日本語と英数字の間の空白」の節の前）。`readme-writing`でこのリポジトリのREADMEを見直したときに、英語の用語を語ごとに訳した見出し（「版の固定」）と、決まり・必須の手順・任意の手順が混ざった「開発」の節が直らなかったことから足した。日本語の技術文書に一般に当てはまるので、`japanese-tech-writing`を参照するSkill（`git-commit`、`plan-create`、`readme-writing`）のすべてで使えるよう、ここに置いた
 - 末尾への「表のセルの書き方」の節の追加（「手順の書き方」の節の後ろ）。READMEのSkill一覧の表で、説明の列に体言止めのセルと動詞で終わるセルが混ざり、末尾の句点の有無も「必要なもの」の列と食い違っていたことから足した。表のセルの書き方は日本語の技術文書に一般に当てはまるので、`readme-writing`ではなく、ここに置いた
 - frontmatterへの`compatibility`の追加（スクリプトにNode.js 18以降が要る）
+- 末尾の節の、原稿をファイルに書いたあとの手順への、`spell-check`での綴りの確認の追加（入っていれば）
 
 ## frontmatterの扱い
 

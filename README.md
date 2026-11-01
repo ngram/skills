@@ -35,12 +35,13 @@ claude.aiに入れたSkillは、Coworkとクラウドセッション、claude.ai
 <!-- skills:list:begin（scripts/sync-skills.mjs が生成する。このブロックは手で編集しない） -->
 | Skill | 説明 | 必要なもの | ライセンス |
 | --- | --- | --- | --- |
-| [git-commit](git-commit/) | Gitのステージング、日本語のコミットメッセージ案とプルリクエストのタイトル・本文の作成、コミットの手順と書式 | gitとNode.js 18以降が必要。スペルの確認にはtyposが必要で、無ければ入れるかを尋ね、入れなければその確認だけを省略 | [MIT](LICENSE) |
+| [git-commit](git-commit/) | Gitのステージング、日本語のコミットメッセージ案とプルリクエストのタイトル・本文の作成、コミットの手順と書式 | gitとNode.js 18以降が必要。スペルの確認にはspell-checkのSkillが必要で、無ければその確認だけを省略 | [MIT](LICENSE) |
 | [japanese-tech-writing](japanese-tech-writing/) | 日本語の技術文書・書籍原稿の文章規範 | 空白の検査と修正（scripts/fix_spacing.mjs）にはNode.js 18以降が必要 | Unlicense AND MIT。取り込み元の部分はUnlicense（[LICENSE.txt](japanese-tech-writing/LICENSE.txt)）、ngram/skillsで足した部分はMIT（[LICENSE-MIT.txt](japanese-tech-writing/LICENSE-MIT.txt)） |
 | [plan-create](plan-create/) | 実装の前の計画（Plan）の作成と、plan/YYYYMMDD_機能名.mdへの保存 | なし | [MIT](LICENSE) |
 | [plan-review](plan-review/) | CodexかClaudeによる、plan/配下のPlanファイルのレビュー | Claude Code（手元とクラウドセッション）向け（引数の置換とdisable-model-invocationを使う）。bashと、codex CLIかclaude CLIが必要。claude.aiのチャットは対象外 | [MIT](LICENSE) |
 | [readme-writing](readme-writing/) | 初めての人が使い始めるための入口としての、短いREADMEの作成と見直し | 計測のスクリプト（scripts/readme_stats.mjs）にはNode.js 18以降が必要 | [MIT](LICENSE) |
 | [repo-privacy-audit](repo-privacy-audit/) | リポジトリと公開済みのパッケージの、個人情報・秘密情報・機微情報の検査と、値を伏せた報告 | gitとNode.js 18以降が必要。公開済みのパッケージを調べるときは、各レジストリのコマンド（gem、npmなど）とネットワーク接続も必要 | [MIT](LICENSE) |
+| [spell-check](spell-check/) | typosによる英単語の綴りの確認と、誤字の直し方、リポジトリのtyposの設定ファイルへの語の登録（ユーザー辞書） | Node.js 18以降とtyposが必要。ステージした内容を確かめるときはgitも必要 | [MIT](LICENSE) |
 <!-- skills:list:end -->
 
 `git-commit`、`plan-create`、`readme-writing`は、`japanese-tech-writing`が入っていれば、書く文章（コミットメッセージやプルリクエストの本文、Plan、README）をその規範に合わせる。

@@ -34,6 +34,11 @@
       "name": "repo-privacy-audit",
       "source": "./repo-privacy-audit",
       "description": "リポジトリと公開済みのパッケージの、個人情報・秘密情報・機微情報の検査と、値を伏せた報告"
+    },
+    {
+      "name": "spell-check",
+      "source": "./spell-check",
+      "description": "typosによる英単語の綴りの確認と、誤字の直し方、リポジトリのtyposの設定ファイルへの語の登録（ユーザー辞書）"
     }
   ]
 }

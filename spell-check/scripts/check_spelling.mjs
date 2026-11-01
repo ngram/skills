@@ -1,28 +1,30 @@
 #!/usr/bin/env node
-// ステージした内容とメッセージの下書きの綴りを、typos で確かめる。依存パッケージは無く、Node.js 18 以降の標準機能だけで動く。
+// ステージした内容と、指定したファイルの綴りを、typos で確かめる。依存パッケージは無く、Node.js 18 以降の標準機能だけで動く。
 //
 // 使い方:
 //   node check_spelling.mjs staged
-//   node check_spelling.mjs message <下書きのファイル>
+//   node check_spelling.mjs files <ファイル>...
 //
-// staged:  ステージした通常のファイル（モード 100644、100755）を、インデックスから一時ディレクトリに書き出して確かめる。
-//          作業ツリーのファイルは読まないので、ステージした内容そのものが確かめられる。
-//          指摘は「今回の変更の行」「変更していない行」「ファイル名」に分けて、行の中身とファイルの種類（文書かソースコードか）を添えて示す。
-// message: 下書きを、リポジトリ直下の typos の設定ファイルと一緒に一時ディレクトリに写して確かめる。
-//          下書きをリポジトリの外（スクラッチパッド）に置いても、リポジトリの設定が効く。
+// staged: ステージした通常のファイル（モード 100644、100755）を、インデックスから一時ディレクトリに書き出して確かめる。
+//         作業ツリーのファイルは読まないので、ステージした内容そのものが確かめられる。
+//         typos の設定ファイル（_typos.toml など）もインデックスから写す。ステージしていない設定の変更は効かない。
+//         指摘は「今回の変更の行」「変更していない行」「ファイル名」に分けて、行の中身とファイルの種類（文書かソースコードか）を添えて示す。
+// files:  作業ツリーのファイルを、作業ツリーの typos の設定ファイルと一緒に一時ディレクトリに写して確かめる。
+//         今いるリポジトリの中のファイルには、そのファイルから最寄りの設定が効く。
+//         リポジトリの外のファイル（スクラッチパッドの下書きなど）には、今いるリポジトリの直下の設定が効く。
+//         ファイル名は確かめない。
 //
-// どちらも、typos の設定ファイル（_typos.toml など）はインデックスから写す。ステージしていない設定の変更は効かない。
 // typos が見つからなければ、確認を飛ばして終了コード 0 で終わる。
 // 指摘があれば終了コード 1、無ければ 0。typos や git が誤字以外の理由で失敗したら、その出力を示して終了コード 2 で終わる。
 
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, extname, join } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, sep } from "node:path";
 
 const USAGE = `使い方:
   node check_spelling.mjs staged
-  node check_spelling.mjs message <下書きのファイル>`;
+  node check_spelling.mjs files <ファイル>...`;
 
 // typos が読む設定ファイルの名前。typos.toml などは名前だけで、pyproject.toml と Cargo.toml は typos の表があるときだけ設定になる。
 const CONFIG_NAMES = ["typos.toml", "_typos.toml", ".typos.toml", "pyproject.toml", "Cargo.toml"];
@@ -83,26 +85,37 @@ function writeBlobs(top, entries, dir) {
   }
 }
 
-// インデックスにある typos の設定ファイル。rootOnly を true にすると、リポジトリ直下のものだけにする。
-function indexConfigs(top, rootOnly = false) {
+// インデックスにある typos の設定ファイル。
+function indexConfigs(top) {
   const out = git(["-c", "core.quotePath=false", "ls-files", "-s", "-z"], { cwd: top }).toString("utf8");
   const entries = [];
   for (const rec of out.split("\0")) {
     const m = rec.match(/^(\d+) ([0-9a-f]+) (\d)\t(.*)$/su);
     if (!m || m[3] !== "0" || !REGULAR_MODES.has(m[1])) continue;
     const path = m[4];
-    if (rootOnly && path.includes("/")) continue;
     if (CONFIG_NAMES.includes(basename(path))) entries.push({ path, oid: m[2] });
   }
   return entries;
 }
 
 // 一時ディレクトリの直下に typos の設定が無ければ、空の _typos.toml を置く。一時ディレクトリの外（ホームなど）の設定まで、typos がさかのぼらないようにするため。
-function stopConfigSearch(dir, rootEntries) {
-  for (const e of rootEntries) {
-    if (isTyposConfig(e.path, readFileSync(join(dir, e.path), "utf8"))) return;
+function stopConfigSearch(dir) {
+  for (const name of CONFIG_NAMES) {
+    const p = join(dir, name);
+    if (existsSync(p) && isTyposConfig(name, readFileSync(p, "utf8"))) return;
   }
+  mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "_typos.toml"), "");
+}
+
+// 作業ツリーの dir（リポジトリ直下からの相対パス）にある typos の設定ファイルを、一時ディレクトリの to に写す。
+function copyWorktreeConfigs(top, dir, to) {
+  for (const name of CONFIG_NAMES) {
+    const from = join(top, ...dir.split("/").filter(Boolean), name);
+    if (!existsSync(from) || !statSync(from).isFile()) continue;
+    mkdirSync(to, { recursive: true });
+    writeFileSync(join(to, name), readFileSync(from));
+  }
 }
 
 // typos を一時ディレクトリで起動し、指摘を返す。ディレクトリではなくファイルのパスを渡す。ディレクトリを渡すと、サブディレクトリの設定が読まれないため。
@@ -272,7 +285,7 @@ function staged(dir) {
   const configs = indexConfigs(top);
   const paths = new Set(targets.map((t) => t.path));
   writeBlobs(top, [...targets, ...configs.filter((c) => !paths.has(c.path))], dir);
-  stopConfigSearch(dir, configs.filter((c) => !c.path.includes("/")));
+  stopConfigSearch(dir);
 
   const found = runTypos(dir, targets.map((t) => t.path), []);
   const added = addedLines(top);
@@ -296,35 +309,70 @@ function staged(dir) {
   return report(groups);
 }
 
-function message(dir, draft) {
-  let text;
-  try {
-    text = readFileSync(draft);
-  } catch (e) {
-    throw new CheckError(`下書きを読めない: ${e.message}`);
-  }
-  const name = basename(draft);
-  let rootConfigs = [];
+// 今いるリポジトリの直下。リポジトリの外なら null。
+function repoTop() {
   const r = spawnSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" });
-  if (!r.error && r.status === 0) {
-    const top = r.stdout.trim();
-    rootConfigs = indexConfigs(top, true).filter((c) => c.path !== name);
-    writeBlobs(top, rootConfigs, dir);
-  }
-  stopConfigSearch(dir, rootConfigs);
-  writeFileSync(join(dir, name), text);
+  if (r.error || r.status !== 0) return null;
+  return realpathSync(r.stdout.trim());
+}
 
-  const found = runTypos(dir, [name], ["--no-check-filenames"]);
-  const cache = new Map();
-  const items = found.map(
-    (t) => `${draft}:${t.line_num}: ${describe(t)}\n    ${lineOf(dir, name, t.line_num, cache)}`,
-  );
-  return report(new Map([["下書き", items]]));
+// 作業ツリーのファイルを写して確かめる。リポジトリの中のファイルは dir/repo の同じ相対パスに、リポジトリの外のファイルは
+// 1つずつ dir/outside-<n> に写す。外のファイルどうしや、リポジトリのファイルと名前がぶつからないようにするため。
+function files(dir, args) {
+  const top = repoTop();
+  const repoDir = join(dir, "repo");
+  // 写した先のディレクトリから、その中の相対パスと、引数に書かれたパスへの Map。
+  const roots = new Map();
+  const seen = new Set();
+  let outside = 0;
+  for (const arg of args) {
+    let real;
+    try {
+      real = realpathSync(arg);
+    } catch (e) {
+      throw new CheckError(`ファイルを読めない（${arg}）: ${e.message}`);
+    }
+    if (!statSync(real).isFile()) throw new CheckError(`ファイルではない: ${arg}`);
+    if (seen.has(real)) continue;
+    seen.add(real);
+    const rel = top === null ? "" : relative(top, real);
+    let root;
+    let path;
+    if (rel && !rel.startsWith("..") && !isAbsolute(rel)) {
+      root = repoDir;
+      path = rel.split(sep).join("/");
+      // ファイルのディレクトリからリポジトリ直下までの設定を写す。typos は最寄りの設定だけを使う。
+      const parts = path.split("/").slice(0, -1);
+      for (let i = parts.length; i >= 0; i--) {
+        copyWorktreeConfigs(top, parts.slice(0, i).join("/"), join(repoDir, ...parts.slice(0, i)));
+      }
+    } else {
+      root = join(dir, `outside-${++outside}`);
+      path = basename(real);
+      if (top !== null) copyWorktreeConfigs(top, "", root);
+    }
+    const file = join(root, ...path.split("/"));
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, readFileSync(real));
+    if (!roots.has(root)) roots.set(root, new Map());
+    roots.get(root).set(path, arg);
+  }
+
+  const items = [];
+  for (const [root, paths] of roots) {
+    stopConfigSearch(root);
+    const cache = new Map();
+    for (const t of runTypos(root, [...paths.keys()], ["--no-check-filenames"])) {
+      const arg = paths.get(t.path) ?? t.path;
+      items.push(`${arg}:${t.line_num}（${kindOf(arg)}）: ${describe(t)}\n    ${lineOf(root, t.path, t.line_num, cache)}`);
+    }
+  }
+  return report(new Map([["ファイル", items]]));
 }
 
 function main(argv) {
-  const [mode, draft] = argv;
-  if (!(mode === "staged" && argv.length === 1) && !(mode === "message" && argv.length === 2)) {
+  const [mode, ...rest] = argv;
+  if (!(mode === "staged" && rest.length === 0) && !(mode === "files" && rest.length > 0)) {
     console.log(USAGE);
     return 2;
   }
@@ -335,7 +383,7 @@ function main(argv) {
       return 0;
     }
     dir = mkdtempSync(join(tmpdir(), "check-spelling-"));
-    return mode === "staged" ? staged(dir) : message(dir, draft);
+    return mode === "staged" ? staged(dir) : files(dir, rest);
   } catch (e) {
     if (!(e instanceof CheckError)) throw e;
     console.error(e.message);

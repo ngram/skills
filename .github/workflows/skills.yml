@@ -20,7 +20,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 22
-      # git-commit の check_spelling.mjs のテストに使う。バージョンは、Skill の手元の確認とそろえる。
+      # spell-check の check_spelling.mjs のテストに使う。バージョンは、Skill の手元の確認とそろえる。
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"

@@ -1,4 +1,4 @@
-// git-commit/scripts/check_spelling.mjs の動作確認。node --test tests/*.test.mjs で実行する。
+// spell-check/scripts/check_spelling.mjs の動作確認。node --test tests/*.test.mjs で実行する。
 // typos が無ければ、typos が要るテストは飛ばす。CI では REQUIRE_TYPOS=1 にして、黙って飛ばされないようにする。
 // 仕込む誤字は、このファイル自体が typos の指摘に当たらないよう、実行時に組み立てる。
 
@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "..", "git-commit", "scripts", "check_spelling.mjs");
+const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "..", "spell-check", "scripts", "check_spelling.mjs");
 const ROOT = mkdtempSync(join(tmpdir(), "check-spelling-test-"));
 // 利用者の git の設定（diff.relative、フックなど）に左右されないよう、空の設定で動かす。
 const GITCONFIG = join(ROOT, "gitconfig");
@@ -93,8 +93,9 @@ if (process.env.REQUIRE_TYPOS === "1") {
 
 test("使い方に合わない引数は終了コード2", () => {
   assert.equal(run(ROOT, []).status, 2);
-  assert.equal(run(ROOT, ["message"]).status, 2);
+  assert.equal(run(ROOT, ["files"]).status, 2);
   assert.equal(run(ROOT, ["staged", "x"]).status, 2);
+  assert.equal(run(ROOT, ["message", "x"]).status, 2);
 });
 
 test("typos が無ければ、確認を飛ばして終了コード0", () => {
@@ -103,37 +104,80 @@ test("typos が無ければ、確認を飛ばして終了コード0", () => {
   assert.match(r.stdout, /typosが見つからないため、スペルの確認を飛ばした/);
 });
 
-test("message: 誤字のある下書きは終了コード1で、下書きのパスと行を示す", { skip }, () => {
+test("files: 誤字のあるファイルは終了コード1で、引数のパス、行、ファイルの種類を示す", { skip }, () => {
   const draft = join(ROOT, "draft-1.md");
+  const code = join(ROOT, "draft-1.ts");
   writeFileSync(draft, `fix: 案内の追加\n\n- requestを${TYPO_RECEIVE}しない\n`);
-  const r = run(ROOT, ["message", draft]);
+  writeFileSync(code, `// ${TYPO_SEPARATE} the data\n`);
+  const r = run(ROOT, ["files", draft, code]);
   assert.equal(r.status, 1, r.stdout + r.stderr);
-  assert.ok(r.stdout.includes(`${draft}:3: \`${TYPO_RECEIVE}\``), r.stdout);
+  assert.ok(r.stdout.includes(`${draft}:3（文書）: \`${TYPO_RECEIVE}\``), r.stdout);
   assert.ok(r.stdout.includes(`- requestを${TYPO_RECEIVE}しない`), r.stdout);
+  assert.ok(r.stdout.includes(`${code}:1（ソースコード）: \`${TYPO_SEPARATE}\``), r.stdout);
 });
 
-test("message: 誤字の無い下書きは終了コード0", { skip }, () => {
-  const draft = join(ROOT, "draft-2.md");
+test("files: 誤字の無いファイルは終了コード0で、ファイル名は確かめない", { skip }, () => {
+  const draft = join(ROOT, `${TYPO_SEPARATE}-2.md`);
   writeFileSync(draft, "fix: 案内の追加\n\n- requestをreceiveしない\n");
-  const r = run(ROOT, ["message", draft]);
+  const r = run(ROOT, ["files", draft]);
   assert.equal(r.status, 0, r.stdout + r.stderr);
 });
 
-test("message: リポジトリの外の下書きにも、リポジトリ直下のステージした設定が効く", { skip }, () => {
+test("files: リポジトリの外のファイルには、リポジトリ直下の作業ツリーの設定が効く", { skip }, () => {
   const repo = newRepo();
-  commit(repo, { "_typos.toml": `[default.extend-words]\n${TYPO_SEPARATE} = "${TYPO_SEPARATE}"\n\n[type.md.extend-words]\n${TYPO_ENVIRONMENT} = "${TYPO_ENVIRONMENT}"\n` });
+  // ステージしていない設定も効く。
+  write(repo, { "_typos.toml": `[default.extend-words]\n${TYPO_SEPARATE} = "${TYPO_SEPARATE}"\n\n[type.md.extend-words]\n${TYPO_ENVIRONMENT} = "${TYPO_ENVIRONMENT}"\n` });
   const md = join(ROOT, "draft-3.md");
   const txt = join(ROOT, "draft-3.txt");
   const body = `fix: ${TYPO_SEPARATE}と${TYPO_ENVIRONMENT}\n`;
   writeFileSync(md, body);
   writeFileSync(txt, body);
-  const r = run(repo, ["message", md]);
+  const r = run(repo, ["files", md]);
   assert.equal(r.status, 0, r.stdout + r.stderr);
-  // [type.md] の設定は、.md の下書きにだけ効く。
-  const t = run(repo, ["message", txt]);
+  // [type.md] の設定は、.md のファイルにだけ効く。
+  const t = run(repo, ["files", txt]);
   assert.equal(t.status, 1, t.stdout);
   assert.ok(t.stdout.includes(`\`${TYPO_ENVIRONMENT}\``));
   assert.ok(!t.stdout.includes(`\`${TYPO_SEPARATE}\``));
+});
+
+test("files: リポジトリの中のファイルには最寄りの設定が効き、同じ名前の外のファイルどうしも確かめる", { skip }, () => {
+  const repo = newRepo();
+  write(repo, {
+    "_typos.toml": `[default.extend-words]\n${TYPO_RECEIVE} = "${TYPO_RECEIVE}"\n`,
+    "sub/_typos.toml": `[default.extend-words]\n${TYPO_SEPARATE} = "${TYPO_SEPARATE}"\n`,
+    "top.md": `${TYPO_RECEIVE} ${TYPO_SEPARATE}\n`,
+    "sub/deep/a.md": `${TYPO_RECEIVE} ${TYPO_SEPARATE}\n`,
+  });
+  const a = join(ROOT, `same-${count}-a`);
+  const b = join(ROOT, `same-${count}-b`);
+  write(ROOT, { [join(`same-${count}-a`, "x.md")]: `${TYPO_ENVIRONMENT}\n`, [join(`same-${count}-b`, "x.md")]: `${TYPO_ENVIRONMENT}\n` });
+  const r = run(repo, ["files", "top.md", join("sub", "deep", "a.md"), join(a, "x.md"), join(b, "x.md")]);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.ok(r.stdout.includes(`top.md:1（文書）: \`${TYPO_SEPARATE}\``), r.stdout);
+  assert.ok(!r.stdout.includes(`top.md:1（文書）: \`${TYPO_RECEIVE}\``), r.stdout);
+  assert.ok(r.stdout.includes(`${join("sub", "deep", "a.md")}:1（文書）: \`${TYPO_RECEIVE}\``), r.stdout);
+  assert.ok(!r.stdout.includes(`a.md:1（文書）: \`${TYPO_SEPARATE}\``), r.stdout);
+  assert.ok(r.stdout.includes(`${join(a, "x.md")}:1（文書）: \`${TYPO_ENVIRONMENT}\``), r.stdout);
+  assert.ok(r.stdout.includes(`${join(b, "x.md")}:1（文書）: \`${TYPO_ENVIRONMENT}\``), r.stdout);
+});
+
+test("files: リポジトリの外で動かすと設定なしで確かめ、一時ディレクトリの親の設定は効かない", { skip }, () => {
+  const outside = mkdtempSync(join(tmpdir(), "check-spelling-outside-"));
+  const parent = join(ROOT, `tmp-files-${count}`);
+  mkdirSync(parent);
+  writeFileSync(join(parent, "_typos.toml"), "[default]\ncheck-file = false\n");
+  writeFileSync(join(outside, "a.md"), `${TYPO_RECEIVE}\n`);
+  const r = run(outside, ["files", "a.md"], { GIT_CEILING_DIRECTORIES: dirname(outside), ...tmpEnv(parent) });
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.ok(r.stdout.includes(`a.md:1（文書）: \`${TYPO_RECEIVE}\``), r.stdout);
+  assert.deepEqual(readdirSync(parent), ["_typos.toml"]);
+  rmSync(outside, { recursive: true, force: true });
+});
+
+test("files: 無いファイルとディレクトリは終了コード2", { skip }, () => {
+  assert.equal(run(ROOT, ["files", join(ROOT, "missing.md")]).status, 2);
+  assert.equal(run(ROOT, ["files", ROOT]).status, 2);
 });
 
 test("staged: 足した行、変更していない行、ファイル名に分けて、行の中身とファイルの種類を示す", { skip }, () => {
