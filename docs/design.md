@@ -174,6 +174,7 @@ ZIPは添付しない。理由は次のとおり。
   - Windowsでは、Codexのサンドボックスを既定で`unelevated`にした（`PLAN_REVIEW_CODEX_WINDOWS_SANDBOX`、`config`で`config.toml`に従う）。`elevated`では、Codexのデスクトップアプリが動いていると、コマンドを起動する前の準備（setup refresh）が「別のプロセスが使用中」で失敗し、Codexがリポジトリを読めないまま終了コード0で応答を返した（Windows 11、Codex CLI 0.162.1で、利用者が確かめた）。`unelevated`でも`-s read-only`の書き込みの禁止が保たれることも、利用者が確かめた。まず`config.toml`に従い、失敗したら`unelevated`でやり直す方式は、失敗する環境では毎回レビューの時間が倍になるので採らなかった。`unelevated`の隔離の弱さ（ネットワークの遮断が環境の側の対策だけで、利用者本人の権限で読む）は、READMEに書いた
   - Codexがコマンドを起動できなかった跡（`ERROR … error=exec_command failed`か`Failed to create unified exec process`で始まる行）が実行ログにあれば、判定を`UNVERIFIED`にして、ユーザーに確かめる。Codexは`helper_unknown_error`のほかにも`helper_*`の失敗の種類を持つので、種類ではなく、この2つの行の書き出しで見る。Codexは実行ログにプロンプトも書くので、プロンプトと同じ行は除いて探す。自動ではやり直さない。同じ設定でやり直しても、同じく失敗するため
   - プロンプトの出力形式に`VERDICT: UNVERIFIED`を足し、ツールのエラーでリポジトリを読めなかったときは、レビューする側がそう書くようにした。Claudeの読むツール（Read、Grep、Glob）はCodexのサンドボックスを通らないので、Claudeでは実行ログを探さず、この行だけで見る（Windowsでは確かめていない）
+  - Codexでレビューするときに、今のフォルダがgitのリポジトリでなければ、ステップ1で`git init -b main`を実行するようにした。Codexは、gitのリポジトリの外では「Not inside a trusted directory」と示して止まり、作ったばかりでまだ`git init`していないフォルダのPlanをレビューできなかったため。Codexの`--skip-git-repo-check`で確かめを外す方法は採らず、`git-commit`と同じく`git init -b main`で作る。Claudeでレビューするときは、リポジトリが無くても動くので作らない
 - 前の版ではclaude.aiのサポート外（`metadata`の`claude-ai: unsupported`）だったが、その印を外した。claude.aiに入れると、クラウドセッションに同期され、`/anthropic-skills:plan-review`で呼べる。claude.aiのチャットでは、Bashと`codex`・`claude`のコマンドが無いので動かない（`compatibility`に書いた）
 
 ### japanese-tech-writing
