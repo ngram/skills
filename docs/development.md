@@ -7,6 +7,7 @@
 - Skillは直下の`<name>/SKILL.md`に置き、ディレクトリ名とfrontmatterの`name`を一致させる
 - claude.aiで使えないSkillは、frontmatterの`metadata`に`claude-ai: unsupported`を書く。そのSkillの`.skill`は作らず、READMEのclaude.aiの節もサポート外の案内になる
 - 各SkillのREADMEのインストール手順、`.claude-plugin/marketplace.json`、READMEのSkill一覧は、`scripts/sync-skills.mjs`が生成する。手で編集しない
+- `git-commit/scripts/check_message.mjs`の一部（全角の文字の判定、体言止めの判定など）は、ほかのスクリプトにコピーしている。元を直したら、コピー先も同じに直す。コピー先の一覧は`tests/copies.test.mjs`の`COPIES`にあり、テストが一致を確かめる
 
 ## 変更するとき
 

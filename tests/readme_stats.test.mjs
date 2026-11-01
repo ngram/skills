@@ -230,11 +230,6 @@ test("使い方と設定ファイルの誤りは終了コード2", () => {
   assert.equal(run("--help").status, 0);
 });
 
-test("全角の範囲の表は check_message.mjs と同じ", () => {
-  const table = (file) => readFileSync(join(ROOT, file), "utf8").match(/const WIDE_RANGES = \[([\s\S]*?)\];/u)[1];
-  assert.equal(table("readme-writing/scripts/readme_stats.mjs"), table("git-commit/scripts/check_message.mjs"));
-});
-
 test("表のセルの体言止めと、箇条書きの足した「状態」とです・ます調を確かめ、自動生成のブロックとコードブロックは見ない", () => {
   const dir = repo({
     "README.md": [
@@ -311,18 +306,4 @@ test("表のセルの末尾の句点を指摘し、ほかの節の見出しを�
     "error README.md:7 表のセルの末尾に句点がある",
     "warn README.md:14 節「バージョンを指定したインストール」は、節「インストール」と同じ話題なら、その中の節にする",
   ]);
-});
-
-test("readme_stats.mjs と sync-skills.mjs の体言止めの判定の表と関数は check_message.mjs と同じ", () => {
-  const read = (file) => readFileSync(join(ROOT, file), "utf8");
-  const pick = (text) => [
-    ...["PREDICATE_END", "NOUN_END", "TRAILER"].map((name) => text.match(new RegExp(`^const ${name} = .*$`, "mu"))[0]),
-    text.match(/^function predicateEnding[\s\S]*?^\}$/mu)[0],
-  ];
-  for (const file of ["readme-writing/scripts/readme_stats.mjs", "scripts/sync-skills.mjs"]) {
-    assert.deepEqual(pick(read(file)), pick(read("git-commit/scripts/check_message.mjs")), file);
-  }
-  // 箇条書きの、です・ます調と足した「状態」の判定も、readme_stats.mjs と check_message.mjs で同じにする。
-  const endings = (text) => ["POLITE_END", "PADDING_END"].map((name) => text.match(new RegExp(`^const ${name} = .*$`, "mu"))[0]);
-  assert.deepEqual(endings(read("readme-writing/scripts/readme_stats.mjs")), endings(read("git-commit/scripts/check_message.mjs")));
 });

@@ -82,6 +82,7 @@ ZIPは添付しない。理由は次のとおり。
 ├── tests/fix_spacing.test.mjs
 ├── tests/package-skills.test.mjs
 ├── tests/check-skill-updates.test.mjs
+├── tests/copies.test.mjs       check_message.mjsのコピーが元と同じかを確かめる
 ├── docs/design.md              この設計書
 ├── docs/development.md         開発とリリースの手順。READMEの「開発」の節からリンクする
 ├── .github/workflows/skills.yml
@@ -94,6 +95,7 @@ ZIPは添付しない。理由は次のとおり。
 ```
 
 - Skillのディレクトリの中身は、どの経路でもすべて利用者の環境にコピーされる。テストはSkillのディレクトリではなく`tests/`に置く
+- Skillは別々に入れるので、あるSkillのスクリプトから、ほかのSkillのスクリプトを`import`できない。`git-commit/scripts/check_message.mjs`の一部（全角の文字の判定、体言止めの判定など）は、使う側のスクリプト（`readme-writing/scripts/readme_stats.mjs`、`japanese-tech-writing/scripts/fix_spacing.mjs`、`scripts/sync-skills.mjs`）にコピーしている。コピー先の一覧は`tests/copies.test.mjs`の`COPIES`にあり、テストが元と一致するかと、一覧に無いコピーが無いかを確かめる
 - `.gitattributes`で改行をLFにそろえる。Windowsで編集しても、リポジトリにはLFで入る
 
 ## 生成するファイル
@@ -236,7 +238,7 @@ GitHubのリリースをclaude.aiに知らせる仕組みも、自動で入れ�
 pushとプルリクエストで`.github/workflows/skills.yml`が次を実行する。
 
 - `node scripts/sync-skills.mjs --check`
-- `node --test tests/*.test.mjs`（`check_message.mjs`、`check_spelling.mjs`、`fix_spacing.mjs`、`scan.mjs`、`package-skills.mjs`、`check-skill-updates.mjs`の動作確認）。`check_spelling.mjs`のテストのために、typos 1.51.1を`pip`で入れ、`REQUIRE_TYPOS=1`を設定する
+- `node --test tests/*.test.mjs`（`check_message.mjs`、`check_spelling.mjs`、`fix_spacing.mjs`、`scan.mjs`、`package-skills.mjs`、`check-skill-updates.mjs`の動作確認と、`check_message.mjs`のコピーの一致の確認）。`check_spelling.mjs`のテストのために、typos 1.51.1を`pip`で入れ、`REQUIRE_TYPOS=1`を設定する
 - `claude plugin validate .`
 - `gh skill publish --dry-run`
 
