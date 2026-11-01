@@ -7,7 +7,7 @@ zipを展開した3つのSkillを、1つのGitHubリポジトリ（`ngram/skills
 
 | Skill | ファイル | 作者・ライセンス | 実行に必要なもの |
 |---|---|---|---|
-| `git-commit` | `SKILL.md`、`scripts/check_message.mjs`、`assets/gitmessage` | ngram・MIT | git、Node.js 18以降 |
+| `git-commit` | `SKILL.md`、`scripts/check_message.mjs`、`scripts/check_spelling.mjs`、`assets/gitmessage` | ngram・MIT | git、Node.js 18以降。スペルの確認にはtypos |
 | `japanese-tech-writing` | `SKILL.md`、`scripts/fix_spacing.mjs`、`LICENSE.txt`、`LICENSE-MIT.txt` | keiichiro shikano・Unlicense（ngram/skillsで足した部分はngram・MIT） | なし（スクリプトにはNode.js 18以降） |
 | `plan-review` | `SKILL.md` | ngram・MIT | bash、codex CLIかclaude CLI |
 
@@ -61,6 +61,7 @@ ZIPは添付しない。理由は次のとおり。
 │   ├── SKILL.md
 │   ├── README.md               インストール手順のブロックを生成する
 │   ├── scripts/check_message.mjs
+│   ├── scripts/check_spelling.mjs  ステージした内容とメッセージの下書きの、typosでの綴りの確認
 │   └── assets/gitmessage
 ├── japanese-tech-writing/
 │   ├── SKILL.md                取り込み元のgistの行は変えず、末尾に節を足す
@@ -73,6 +74,7 @@ ZIPは添付しない。理由は次のとおり。
 ├── scripts/package-skills.mjs  claude.ai向けのSkillごとの.skillを作るスクリプト
 ├── scripts/check-skill-updates.mjs  claude.aiに入っているSkillと最新のリリースの.skillを比べるスクリプト
 ├── tests/check_message.test.mjs
+├── tests/check_spelling.test.mjs
 ├── tests/fix_spacing.test.mjs
 ├── tests/package-skills.test.mjs
 ├── tests/check-skill-updates.test.mjs
@@ -136,6 +138,13 @@ ZIPは添付しない。理由は次のとおり。
 - 箇条書きの終え方の、変更や作業は体言止め、事実や状態は常体の用言止めへの変更。すべての項目に体言止めを求めると、「〜で使えない状態」のように、述語の後ろに「状態」を足した項目が増えたため。`check_message.mjs`は、体言止めを1行目だけに求め、箇条書きでは、述語の後ろに足した「状態」と、です・ます調を指摘する。`readme-writing`のREADMEの箇条書きも同じ規則にし、`readme_stats.mjs`も同じ形を指摘する（表のセルは体言止めのまま）
 - 「問題」の節の、問題（何が起きていて、何が困るか）と、一段下げた原因（「〜が原因」）への分け方の追加。起きていることだけを並べると、何が困るのかと、どれが原因なのかが読み取れなかったため。`check_message.mjs`は、「問題」の節の一段下げた項目が「〜が原因」で終わっているかを見る
 - 問題が2つ以上あるときの、問題のラベル（`A: `、`B: `…）と、「対応」の節のラベルごとの小見出し（`### A: <見出し>`、共通の対応は`### A・B: <見出し>`、どの問題にも当たらない変更は`### その他の変更`）の追加。「対応」の項目が、どの問題への対応なのかを読み取れなかったため。「テスト」と「影響」の節はラベルで分けない。`check_message.mjs`は、ラベルが上から順に付いているか、小見出しが定義したラベルを指しているか、どの問題にも小見出しがあるかを見る。ラベルの`: `の後ろの空白は、全角文字との間の空白の検査から外す
+- typosによるスペルの確認（`scripts/check_spelling.mjs`）の追加。英単語の綴りの誤りが、ステージしたファイルにも、メッセージ案とプルリクエストの本文にも残ったまま入っていたため
+  - `staged`は、ステージした内容を`git cat-file --batch`で一時ディレクトリに書き出してから確かめる。作業ツリーのパスを渡すと、作業ツリーで削除したファイルでtyposが失敗し、一部だけステージしたファイルでは作業ツリーの内容を確かめてしまう。`git checkout-index`はsmudgeフィルターと改行の変換をかけるので使わない
+  - typosの設定ファイルもインデックスから写す。一時ディレクトリの直下に設定が無ければ、空の`_typos.toml`を置いて、一時ディレクトリの外（ホームなど）の設定までさかのぼらないようにする
+  - typosには、ディレクトリではなくファイルのパスを渡す。typosは渡したパスごとに設定を探すので、ディレクトリを渡すとサブディレクトリの設定が読まれない
+  - Skillが直すのは、ソースコードのコメントと文書の文章の誤字に限る。識別子、文字列、コードブロックの誤字は、直すと参照が崩れることがあるので、確認してほしい点としてユーザーに示す
+  - 確認してほしい点の語は、リポジトリのtyposの設定ファイルに登録できる（ユーザー辞書）。既存の名前は`extend-identifiers`ではなく`extend-ignore-re`に登録する。typosは`-`と`.`で語を区切ってから照らし合わせるので、`-`や`.`を含む名前が`extend-identifiers`では通らないため
+  - typosが無い環境では、入れるかをユーザーに尋ね、断られたら確認を飛ばす。尋ねずに入れないのは、ユーザーの環境にソフトウェアを足すことになるため。CIでは`REQUIRE_TYPOS=1`にして、テストが黙って飛ばされないようにする
 
 ### plan-review
 
@@ -217,7 +226,7 @@ GitHubのリリースをclaude.aiに知らせる仕組みも、自動で入れ�
 pushとプルリクエストで`.github/workflows/skills.yml`が次を実行する。
 
 - `node scripts/sync-skills.mjs --check`
-- `node --test tests/*.test.mjs`（`check_message.mjs`、`fix_spacing.mjs`、`scan.mjs`、`package-skills.mjs`、`check-skill-updates.mjs`の動作確認）
+- `node --test tests/*.test.mjs`（`check_message.mjs`、`check_spelling.mjs`、`fix_spacing.mjs`、`scan.mjs`、`package-skills.mjs`、`check-skill-updates.mjs`の動作確認）。`check_spelling.mjs`のテストのために、typos 1.51.1を`pip`で入れ、`REQUIRE_TYPOS=1`を設定する
 - `claude plugin validate .`
 - `gh skill publish --dry-run`
 
