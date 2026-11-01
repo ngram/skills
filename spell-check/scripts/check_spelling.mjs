@@ -313,7 +313,7 @@ function staged(dir) {
 function repoTop() {
   const r = spawnSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" });
   if (r.error || r.status !== 0) return null;
-  return realpathSync(r.stdout.trim());
+  return realpathSync.native(r.stdout.trim());
 }
 
 // 作業ツリーのファイルを写して確かめる。リポジトリの中のファイルは dir/repo の同じ相対パスに、リポジトリの外のファイルは
@@ -328,7 +328,8 @@ function files(dir, args) {
   for (const arg of args) {
     let real;
     try {
-      real = realpathSync(arg);
+      // native を使う。Windows の 8.3 形式の短い名前（RUNNER~1 など）を、git が返す長い名前にそろえるため。
+      real = realpathSync.native(arg);
     } catch (e) {
       throw new CheckError(`ファイルを読めない（${arg}）: ${e.message}`);
     }
