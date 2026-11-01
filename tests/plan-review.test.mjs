@@ -66,14 +66,25 @@ exit "\${FAKE_STATUS:-0}"
 const FAKE_UNAME = `#!/bin/bash
 echo "\${FAKE_UNAME:-Linux}"
 `;
+// 偽の git。受け取った引数を記録し、rev-parse は FAKE_GIT_INSIDE（既定は 0。リポジトリの中）、
+// init は FAKE_GIT_INIT（既定は 0）の終了コードを返す。
+const FAKE_GIT = `#!/bin/bash
+printf '%s\\n' "$*" >> "$FAKE_DIR/git.calls"
+case "$1" in
+  rev-parse) exit "\${FAKE_GIT_INSIDE:-0}" ;;
+  init) exit "\${FAKE_GIT_INIT:-0}" ;;
+esac
+exit 0
+`;
 
-// 一時的なディレクトリを作り、偽のコマンドを fakebin/ に置く。commands は置くコマンドの名前。uname は常に置く。
+// 一時的なディレクトリを作り、偽のコマンドを fakebin/ に置く。commands は置くコマンドの名前。uname と git は常に置く。
 function workspace(commands) {
   const dir = mkdtempSync(join(tmpdir(), "plan-review-"));
   mkdirSync(join(dir, "fakebin"));
   mkdirSync(join(dir, "fake"));
-  for (const [name, body] of [["codex", FAKE_CODEX], ["claude", FAKE_CLAUDE], ["uname", FAKE_UNAME]]) {
-    if (name !== "uname" && !commands.includes(name)) continue;
+  const always = ["uname", "git"];
+  for (const [name, body] of [["codex", FAKE_CODEX], ["claude", FAKE_CLAUDE], ["uname", FAKE_UNAME], ["git", FAKE_GIT]]) {
+    if (!always.includes(name) && !commands.includes(name)) continue;
     writeFileSync(join(dir, "fakebin", name), body);
     chmodSync(join(dir, "fakebin", name), 0o755);
   }
@@ -106,7 +117,7 @@ function choose(args, { commands = ["codex", "claude"], env = {} } = {}) {
   const script = `${substitute(block("レビューする側を決める"), args)}\necho "RESULT=$REVIEWER|$PLAN_ARG"`;
   const r = runBlock(dir, script, { env });
   const result = r.stdout.match(/^RESULT=(.*)\|(.*)$/mu);
-  return { ...r, reviewer: result?.[1], planArg: result?.[2] };
+  return { ...r, dir, reviewer: result?.[1], planArg: result?.[2] };
 }
 
 test("レビューする側は、引数、環境変数、auto の順に決まる", { skip }, () => {
@@ -173,6 +184,27 @@ test("Codex を明示したときは、codex login status が失敗しても中�
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.equal(r.reviewer, "codex");
   assert.match(r.stdout, /注意: codex login statusが失敗しました/u);
+});
+
+test("Codex でレビューするときは、git のリポジトリでなければ git init -b main で作る", { skip }, () => {
+  const calls = (r) => (existsSync(join(r.dir, "fake", "git.calls")) ? read(r.dir, "fake/git.calls") : "");
+  let r = choose("--reviewer codex", { env: { FAKE_GIT_INSIDE: "128" } });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(calls(r), /^init -b main$/mu);
+  assert.match(r.stdout, /注意: このフォルダはgitのリポジトリではないので、git init -b mainで作ります/u);
+
+  r = choose("--reviewer codex");
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.doesNotMatch(calls(r), /^init/mu, "リポジトリの中なら作らない");
+  assert.doesNotMatch(r.stdout, /git init/u);
+
+  r = choose("--reviewer claude", { env: { FAKE_GIT_INSIDE: "128" } });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.doesNotMatch(calls(r), /^init/mu, "Claude のときは作らない");
+
+  r = choose("--reviewer codex", { env: { FAKE_GIT_INSIDE: "128", FAKE_GIT_INIT: "1" } });
+  assert.equal(r.status, 1);
+  assert.match(r.stdout, /エラー: git init -b mainに失敗しました/u);
 });
 
 test("前の版の PLAN_REVIEW_MODEL と PLAN_REVIEW_EFFORT は読まず、新しい名前を示す", { skip }, () => {

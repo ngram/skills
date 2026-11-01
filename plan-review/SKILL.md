@@ -153,6 +153,19 @@ fi
 if [ "$REVIEWER" = "codex" ] && ! codex login status >/dev/null 2>&1; then
   echo "注意: codex login statusが失敗しました。ログインしていなければ、ステップ4でcodexが失敗します（${HOW}で選びました）。"
 fi
+# Codexは、gitのリポジトリの外では「Not inside a trusted directory」と示して止まる。
+# 作ったばかりで、まだgit initしていないフォルダでもレビューできるよう、リポジトリでなければ作る。
+if [ "$REVIEWER" = "codex" ] && ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  if command -v git >/dev/null 2>&1; then
+    echo "注意: このフォルダはgitのリポジトリではないので、git init -b mainで作ります（Codexはリポジトリの外では動かないため）。"
+    if ! git init -b main; then
+      echo "エラー: git init -b mainに失敗しました。"
+      exit 1
+    fi
+  else
+    echo "注意: gitが見つかりません。Codexはgitのリポジトリの外では動かないので、ステップ4で失敗します。gitを入れるか、--reviewer claudeを付けてください。"
+  fi
+fi
 
 # 前の版の環境変数は読まない。設定されていれば、新しい名前を示す。
 for OLD in PLAN_REVIEW_MODEL PLAN_REVIEW_EFFORT; do
@@ -171,6 +184,8 @@ echo "Planの指定    : ${PLAN_ARG:-（なし）}"
 - クラウドセッションでは、環境の設定（環境変数、Setup script、Network access）が要る。手順はこのSkillの`README.md`の「クラウドセッションでCodexを使う」にある
 - `--reviewer claude`を付ければ、Claudeでレビューできる
 - `auto`は`codex login status`でログインを確かめる。環境変数のAPIキーだけでCodexを使っていて、`auto`がClaudeを選ぶときは、`--reviewer codex`か`PLAN_REVIEW_REVIEWER=codex`で明示する
+
+Codexでレビューするときに、今のフォルダがgitのリポジトリでなければ、`git init -b main`でリポジトリを作る。Codexは、gitのリポジトリの外では「Not inside a trusted directory」と示して止まるためである。作ったことは、その旨の表示でユーザーに伝わる。Claudeでレビューするときは、リポジトリを作らない。
 
 決まった`REVIEWER`は、ステップ4で使う。
 
