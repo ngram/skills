@@ -23,6 +23,8 @@
 //     どの問題にも小見出しがあるか。問題が1つのときに、ラベルを付けていないか
 //   - 本文に、箇条書きでない日本語の行（段落、表）が無いか。本文は節の見出しと箇条書きで書く。
 //     日本語を含まない行（Co-Authored-By などのトレーラー、URL、生成元の表示）とコードブロックは見ない
+//   - 箇条書きの項目の間に空行が無いか。GitHub の Markdown は、項目の間に空行が1つでもあると、
+//     その箇条書きのすべての項目を段落の間隔で表示する。見出しの前後の空行は見ない
 //
 // 規則に合わない行があれば、その行を示して終了コード1で終わる。
 
@@ -174,6 +176,35 @@ function labelProblems(lines) {
   return notes;
 }
 
+// 前に空行があり、同じ箇条書きの続きになっている項目の、行の番号（0始まり）を返す。
+// 箇条書きは、見出し、字下げしていない行、字下げしていないコードブロックで終わったものとみなす。
+function blankLineInListProblems(lines) {
+  const found = new Set();
+  let inFence = false;
+  let inList = false;
+  let blank = false;
+  lines.forEach((line, idx) => {
+    if (idx === 0) return;
+    if (inFence) {
+      if (FENCE.test(line)) inFence = false;
+      return;
+    }
+    if (!line.trim()) {
+      blank = true;
+      return;
+    }
+    if (BULLET.test(line)) {
+      if (inList && blank) found.add(idx);
+      inList = true;
+    } else if (!/^\s/u.test(line)) {
+      inList = false;
+    }
+    if (FENCE.test(line)) inFence = true;
+    blank = false;
+  });
+  return found;
+}
+
 // East Asian Width が W（全角）または F（Fullwidth）の範囲。Unicode 15.1 の unicodedata から生成した。
 const WIDE_RANGES = [
   [0x1100, 0x115F], [0x231A, 0x231B], [0x2329, 0x232A], [0x23E9, 0x23EC], [0x23F0, 0x23F0],
@@ -254,6 +285,7 @@ function main(argv) {
   // いま読んでいる節の見出し（「## 問題」なら「問題」）。
   let section = null;
   const labelNotes = labelProblems(lines);
+  const blankInList = blankLineInListProblems(lines);
   lines.forEach((line, idx) => {
     const i = idx + 1;
     const w = width(line);
@@ -276,6 +308,9 @@ function main(argv) {
       }
     }
     notes.push(...(labelNotes.get(idx) ?? []));
+    if (blankInList.has(idx)) {
+      notes.push("箇条書きの項目の間に空行がある。GitHub では、1つでもあるとすべての項目が段落の間隔で表示される。空行を消すか、別の箇条書きにするなら間に見出しを置く");
+    }
     if (i > 1 && item === null && !fence && !inFence && !HEADING.test(line) && JAPANESE.test(line)) {
       notes.push("箇条書きになっていない（段落や表）。本文は節の見出しと箇条書きで書く");
     }
