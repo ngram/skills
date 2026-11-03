@@ -209,3 +209,48 @@ test("段落と表を検出し、見出し、コードブロック、トレー�
   assert.equal(ng.status, 1);
   assert.equal(ng.stdout.match(/箇条書きになっていない/g).length, 3);
 });
+
+test("箇条書きの項目の間の空行を検出し、見出し、コードブロック、トレーラーの前後の空行は通す", () => {
+  const ng = run("fix: 案内の追加\n\n## 対応\n- 処理の追加\n- 案内の追加\n\n- 検査の追加\n");
+  assert.equal(ng.status, 1);
+  assert.equal(ng.stdout.match(/箇条書きの項目の間に空行がある/g).length, 1);
+  assert.match(ng.stdout, /^! {2}7 .*- 検査の追加$/mu);
+
+  // 入れ子の項目の前の空行と、番号付きの箇条書きの空行も、すべての項目を段落の間隔にする。
+  const nested = run("fix: 案内の追加\n\n## 問題\n- 案内が出ず、手順が分からない\n\n  - 設定が無いのが原因\n");
+  assert.equal(nested.status, 1);
+  assert.match(nested.stdout, /箇条書きの項目の間に空行がある/);
+  const ordered = run("fix: 案内の追加\n\n## テスト\n1. 処理の実行\n\n2. 結果の確認\n");
+  assert.equal(ordered.status, 1);
+  assert.match(ordered.stdout, /箇条書きの項目の間に空行がある/);
+
+  const ok = run([
+    "fix: 案内の追加",
+    "",
+    "## 問題",
+    "",
+    "- A: 案内が出ず、手順が分からない",
+    "  - 設定が無いのが原因",
+    "- B: 検査が無く、誤りに気付かない",
+    "",
+    "## 対応",
+    "",
+    "### A: 案内",
+    "- 案内の追加",
+    "",
+    "### B: 検査",
+    "- 検査の追加",
+    "",
+    "```",
+    "- コードブロックの中の空行は見ない",
+    "",
+    "- コードブロックの中の空行は見ない",
+    "```",
+    "",
+    "- コードブロックの後ろの、新しい箇条書き",
+    "",
+    "Co-Authored-By: Example <noreply@example.com>",
+    "",
+  ].join("\n"));
+  assert.equal(ok.status, 0, ok.stdout);
+});
