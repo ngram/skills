@@ -23,7 +23,7 @@ test("書式に合うメッセージは終了コード0", () => {
 });
 
 test("BOMとCRLFを含むファイルも読める", () => {
-  const r = run("\uFEFFfix: 案内の追加\r\n\r\n- 項目\r\n");
+  const r = run("\uFEFFfix: 月次の案内\r\n\r\n- 項目\r\n");
   assert.equal(r.status, 0, r.stdout);
 });
 
@@ -39,30 +39,30 @@ test("2つ目の引数で1行目の上限を変えられる", () => {
 });
 
 test("箇条書きの折り返しを検出する", () => {
-  const r = run("fix: 案内の追加\n\n- 長い項目\n  の続き\n");
+  const r = run("fix: 月次の案内\n\n- 長い項目\n  の続き\n");
   assert.equal(r.status, 1);
   assert.match(r.stdout, /箇条書きを折り返している/);
 });
 
 test("バッククォートの外でくっついたHTTPのメソッドとパスを検出する", () => {
-  const r = run("fix: 案内の追加\n\n- GET/v1/viewsの呼び出し\n");
+  const r = run("fix: 月次の案内\n\n- GET/v1/viewsの呼び出し\n");
   assert.equal(r.status, 1);
   assert.match(r.stdout, /HTTP のメソッドとパスがくっついている/);
 });
 
 test("全角文字と記号で始まる語の間の空白を検出する", () => {
-  const r = run("fix: 案内の追加\n\n- テンプレート .gitmessage の追加\n");
+  const r = run("fix: 月次の案内\n\n- テンプレート .gitmessage の追加\n");
   assert.equal(r.status, 1);
   assert.match(r.stdout, /全角文字と記号の間に空白/);
 });
 
 test("体言止めを求めるのは1行目だけで、箇条書きの常体の用言止めは通す", () => {
-  const ng = run("fix: 案内を追加する\n\n## 問題\n- 予算と比べる手段が無い\n");
+  const ng = run("fix: 案内を表示する\n\n## 問題\n- 予算と比べる手段が無い\n");
   assert.equal(ng.status, 1);
   assert.equal(ng.stdout.match(/体言止めになっていない/g).length, 1);
-  assert.match(ng.stdout, /1行目が体言止めになっていない（「…加する」で終わる）/);
+  assert.match(ng.stdout, /1行目が体言止めになっていない（「…示する」で終わる）/);
   const ok = run([
-    "fix: 案内の追加",
+    "fix: 月次の案内",
     "",
     "## 問題",
     "- A: 予算と比べる手段が無い",
@@ -80,7 +80,7 @@ test("体言止めを求めるのは1行目だけで、箇条書きの常体の�
 
 test("「問題」の節の一段下げた項目は「〜が原因」で終え、ほかの節の入れ子は見ない", () => {
   const ok = run([
-    "fix: 案内の追加",
+    "fix: 月次の案内",
     "",
     "## 問題",
     "- 項目に「状態」が付いて読みにくい",
@@ -93,7 +93,7 @@ test("「問題」の節の一段下げた項目は「〜が原因」で終え�
     "",
   ].join("\n"));
   assert.equal(ok.status, 0, ok.stdout);
-  const ng = run("fix: 案内の追加\n\n## 問題\n- 項目が読みにくい\n  - テンプレートの例が「状態」を足す書き方を勧めている\n");
+  const ng = run("fix: 月次の案内\n\n## 問題\n- 項目が読みにくい\n  - テンプレートの例が「状態」を足す書き方を勧めている\n");
   assert.equal(ng.status, 1);
   assert.match(ng.stdout, /一段下げた項目は原因を書き、「〜が原因」で終える/);
 });
@@ -132,7 +132,7 @@ test("問題が2つ以上あるときは、ラベルを付けた問題と、ラ�
 });
 
 test("問題が2つ以上あるときの、ラベルの抜けと順番の誤りを検出する", () => {
-  const r = run("fix: 案内の追加\n\n## 問題\n- 項目が読みにくい\n- B: 案内が出ない\n- D: 手順が分からない\n");
+  const r = run("fix: 月次の案内\n\n## 問題\n- 項目が読みにくい\n- B: 案内が出ない\n- D: 手順が分からない\n");
   assert.equal(r.status, 1);
   assert.equal(r.stdout.match(/上から順に「A: 」「B: 」…で始める/g).length, 2);
   assert.match(r.stdout, /（ここは「A: 」）/);
@@ -140,17 +140,17 @@ test("問題が2つ以上あるときの、ラベルの抜けと順番の誤り�
 });
 
 test("問題が1つのときの、問題と対応の小見出しのラベルを検出する", () => {
-  const r = run("fix: 案内の追加\n\n## 問題\n- A: 案内が出ない\n\n## 対応\n### A: 案内の追加\n- 案内の追加\n");
+  const r = run("fix: 月次の案内\n\n## 問題\n- A: 案内が出ない\n\n## 対応\n### A: 案内の追加\n- 案内の追加\n");
   assert.equal(r.status, 1);
   assert.match(r.stdout, /問題が1つのときは、ラベル（「A: 」）を付けない/);
   assert.match(r.stdout, /「対応」の小見出しにラベルを付けない/);
-  const ok = run("fix: 案内の追加\n\n## 問題\n- 案内が出ない\n\n## 対応\n- 案内の追加\n");
+  const ok = run("fix: 月次の案内\n\n## 問題\n- 案内が出ない\n\n## 対応\n- 案内の追加\n");
   assert.equal(ok.status, 0, ok.stdout);
 });
 
 test("小見出しの外の対応、定義していないラベル、小見出しの無い問題、形の違う小見出しを検出する", () => {
   const r = run([
-    "fix: 案内の追加",
+    "fix: 月次の案内",
     "",
     "## 問題",
     "- A: 案内が出ない",
@@ -173,7 +173,7 @@ test("小見出しの外の対応、定義していないラベル、小見出�
 });
 
 test("箇条書きの、述語の後ろに足した「状態」と、です・ます調を検出する", () => {
-  const r = run("fix: 案内の追加\n\n## 影響\n- クラウドセッションで使えない状態\n- 実装計画がコミットされている状態（plan/）。\n- 古い版も使えます\n- 初期状態\n");
+  const r = run("fix: 月次の案内\n\n## 影響\n- クラウドセッションで使えない状態\n- 実装計画がコミットされている状態（plan/）。\n- 古い版も使えます\n- 初期状態\n");
   assert.equal(r.status, 1);
   assert.equal(r.stdout.match(/「状態」を足している/g).length, 2);
   assert.match(r.stdout, /「…えない状態」/);
@@ -181,7 +181,7 @@ test("箇条書きの、述語の後ろに足した「状態」と、です・�
 });
 
 test("末尾の句点と括弧書きを除いて見て、名詞で終わる項目は通す", () => {
-  const ok = run("fix: 案内の追加\n\n- 処理の追加（呼び出し元で確かめる）\n- 上限の近く\n- なし\n- 1件ずつの処理。\n- `--fix`\n");
+  const ok = run("fix: 月次の案内\n\n- 処理の追加（呼び出し元で確かめる）\n- 上限の近く\n- なし\n- 1件ずつの処理。\n- `--fix`\n");
   assert.equal(ok.status, 0, ok.stdout);
   const ng = run("fix: 処理を加える（詳しくは設計書）。\n\n- 処理の追加\n");
   assert.equal(ng.status, 1);
@@ -190,7 +190,7 @@ test("末尾の句点と括弧書きを除いて見て、名詞で終わる項�
 
 test("段落と表を検出し、見出し、コードブロック、トレーラー、URL、生成元の表示は通す", () => {
   const ok = run([
-    "feat: 案内の追加",
+    "feat: 月次の案内",
     "",
     "## 対応",
     "- 案内の追加",
@@ -205,27 +205,27 @@ test("段落と表を検出し、見出し、コードブロック、トレー�
     "",
   ].join("\n"));
   assert.equal(ok.status, 0, ok.stdout);
-  const ng = run("feat: 案内の追加\n\n## テスト\n本文を文章で書いた。\n\n| 課題 | 結果 |\n|---|---|\n| 縮約 | 148行 |\n");
+  const ng = run("feat: 月次の案内\n\n## テスト\n本文を文章で書いた。\n\n| 課題 | 結果 |\n|---|---|\n| 縮約 | 148行 |\n");
   assert.equal(ng.status, 1);
   assert.equal(ng.stdout.match(/箇条書きになっていない/g).length, 3);
 });
 
 test("箇条書きの項目の間の空行を検出し、見出し、コードブロック、トレーラーの前後の空行は通す", () => {
-  const ng = run("fix: 案内の追加\n\n## 対応\n- 処理の追加\n- 案内の追加\n\n- 検査の追加\n");
+  const ng = run("fix: 月次の案内\n\n## 対応\n- 処理の追加\n- 案内の追加\n\n- 検査の追加\n");
   assert.equal(ng.status, 1);
   assert.equal(ng.stdout.match(/箇条書きの項目の間に空行がある/g).length, 1);
   assert.match(ng.stdout, /^! {2}7 .*- 検査の追加$/mu);
 
   // 入れ子の項目の前の空行と、番号付きの箇条書きの空行も、すべての項目を段落の間隔にする。
-  const nested = run("fix: 案内の追加\n\n## 問題\n- 案内が出ず、手順が分からない\n\n  - 設定が無いのが原因\n");
+  const nested = run("fix: 月次の案内\n\n## 問題\n- 案内が出ず、手順が分からない\n\n  - 設定が無いのが原因\n");
   assert.equal(nested.status, 1);
   assert.match(nested.stdout, /箇条書きの項目の間に空行がある/);
-  const ordered = run("fix: 案内の追加\n\n## テスト\n1. 処理の実行\n\n2. 結果の確認\n");
+  const ordered = run("fix: 月次の案内\n\n## テスト\n1. 処理の実行\n\n2. 結果の確認\n");
   assert.equal(ordered.status, 1);
   assert.match(ordered.stdout, /箇条書きの項目の間に空行がある/);
 
   const ok = run([
-    "fix: 案内の追加",
+    "fix: 月次の案内",
     "",
     "## 問題",
     "",
@@ -253,4 +253,31 @@ test("箇条書きの項目の間の空行を検出し、見出し、コード�
     "",
   ].join("\n"));
   assert.equal(ok.status, 0, ok.stdout);
+});
+
+test("1行目の「の、」「と、」と、「追加」「削除」を検出し、変えたものの名詞で終える1行目は通す", () => {
+  for (const title of [
+    "feat: git-commitの箇条書きの項目の間の空行の検査ルール",
+    "feat: spell-check Skill、4Skillからのspell-check呼び出し",
+    "feat: plan-reviewのreviewerでのCodexとClaudeの切り替えサポート",
+    "fix: `--add`の引数の扱い",
+  ]) {
+    const ok = run(`${title}\n`);
+    assert.equal(ok.status, 0, ok.stdout);
+  }
+
+  let r = run("feat: git-commitの、箇条書きの項目の間の空行の検査\n");
+  assert.equal(r.status, 1);
+  assert.match(r.stdout, /対象と内容を「の、」で区切っている/);
+  r = run("feat: spell-checkのSkillの追加と、4つのSkillからの綴りの確認\n");
+  assert.equal(r.status, 1);
+  assert.match(r.stdout, /2つの変更を「と、」で結んでいる/);
+  assert.match(r.stdout, /1行目に「追加」がある/);
+  r = run("chore: plan/の実装計画のファイルの削除\n");
+  assert.equal(r.status, 1);
+  assert.match(r.stdout, /1行目に「削除」がある/);
+
+  // 本文の項目の「追加」と「の、」は見ない。
+  r = run("feat: 月次の案内\n\n## 対応\n- `check_message.mjs`の、1行目の検査の追加\n");
+  assert.equal(r.status, 0, r.stdout);
 });
