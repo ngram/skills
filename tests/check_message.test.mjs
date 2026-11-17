@@ -254,3 +254,27 @@ test("箇条書きの項目の間の空行を検出し、見出し、コード�
   ].join("\n"));
   assert.equal(ok.status, 0, ok.stdout);
 });
+
+test("1行目の「の、」「と、」を検出し、変更の種類の語で終える1行目は通す", () => {
+  for (const title of [
+    "feat: git-commitの箇条書きの項目の間の空行の検査ルールの追加",
+    "feat: spell-check Skillの追加、4Skillでのspell-checkの利用",
+    "feat: plan-reviewのreviewerでのCodexとClaudeの切り替えサポート",
+    "chore: 実装計画のファイルの削除、.gitignoreでのplan/の除外",
+    "fix: `--name、--path`の引数の扱い",
+  ]) {
+    const ok = run(`${title}\n`);
+    assert.equal(ok.status, 0, ok.stdout);
+  }
+
+  let r = run("feat: git-commitの、箇条書きの項目の間の空行の検査ルールの追加\n");
+  assert.equal(r.status, 1);
+  assert.match(r.stdout, /対象と内容を「の、」で区切っている/);
+  r = run("feat: spell-check Skillの追加と、4Skillでのspell-checkの利用\n");
+  assert.equal(r.status, 1);
+  assert.match(r.stdout, /2つの変更を「と、」で結んでいる/);
+
+  // 本文の項目の「の、」は見ない。
+  r = run("feat: 案内の追加\n\n## 対応\n- `check_message.mjs`の、1行目の検査の追加\n");
+  assert.equal(r.status, 0, r.stdout);
+});

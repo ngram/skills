@@ -15,6 +15,8 @@
 //     「GET /v1/views」を書き換えてしまう。コマンドやパスはバッククォートで囲むと守られる
 //   - 1行目が、体言止めになっているか（「〜する」「〜が無い」「〜です」などで終わっていないか）。
 //     末尾の「。」と括弧書きは除いて見る。語の形だけで判断する目安なので、名詞なのに当たるときは言い換える
+//   - 1行目で、対象と内容を「の、」で区切っていないか（「git-commitの、箇条書き…」）。
+//     2つの変更を「と、」で結んでいないか（「A、B」のように並べる）
 //   - 箇条書きの各項目が、述語の後ろに「状態」を足して名詞にしていないか（「〜で使えない状態」）、
 //     です・ます調で終わっていないか。箇条書きは、変更や作業を体言止めに、事実や状態を常体の用言止めにする
 //   - 「問題」の節の一段下げた項目（原因）が、「〜が原因」で終わっているか。上の段に問題を、下の段に原因を書く
@@ -58,6 +60,9 @@ const TRAILER = /(?:[。.\s]+|（[^（）]*）|\([^()]*\))$/u;
 const POLITE_END = /(?:です|ます|ました|ません|でした|ましょう|ください)$/u;
 // 述語の後ろに足して、項目を名詞で終えるための語（「〜で使えない状態」）。用言止めで言える項目なので要らない。
 const PADDING_END = /状態$/u;
+// 1行目で、対象と内容を区切る読点（「git-commitの、箇条書き…」）と、2つの変更を結ぶ読点（「Aの…と、B」）。
+const TARGET_COMMA = "の、";
+const JOIN_COMMA = "と、";
 // 節の見出し（「## 問題」）。「### A: …」の小見出しは節を変えない。
 const SECTION = /^\s*#{1,2}(?!#)\s*(.*)$/u;
 const SUB_HEADING = /^\s*###(?!#)\s*(.*)$/u;
@@ -300,7 +305,14 @@ function main(argv) {
     const item = i === 1 ? line.replace(COMMIT_TYPE, "") : !inFence && BULLET.test(line) ? line.replace(BULLET, "") : null;
     if (i === 1) {
       const ending = predicateEnding(item);
-      if (ending) notes.push(`1行目が体言止めになっていない（「…${ending}」で終わる）。「〜の追加」のように、変更を名詞にして終える`);
+      if (ending) notes.push(`1行目が体言止めになっていない（「…${ending}」で終わる）。「〜の追加」「〜の修正」のように、変更の種類の語で終える`);
+      const outside = item.replace(CODE_SPAN, "");
+      if (outside.includes(TARGET_COMMA)) {
+        notes.push("1行目で、対象と内容を「の、」で区切っている。「git-commitの、箇条書き…」ではなく「git-commitの箇条書き…」のようにつなげる");
+      }
+      if (outside.includes(JOIN_COMMA)) {
+        notes.push("1行目で、2つの変更を「と、」で結んでいる。「A、B」のように「、」で並べる");
+      }
     } else if (item !== null) {
       notes.push(...itemProblems(item));
       if (section === "問題" && /^\s+/u.test(line) && JAPANESE.test(item) && !/原因$/u.test(stripTrailer(item))) {
