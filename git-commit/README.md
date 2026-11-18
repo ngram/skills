@@ -14,6 +14,13 @@
 /plugin install git-commit@ngram-skills
 ```
 
+VS Code拡張のプロンプトでは`/plugin`を使えないので、ターミナルで次を実行する。ターミナルで入れたプラグインは、VS Code拡張でも読み込まれる。
+
+```bash
+claude plugin marketplace add ngram/skills
+claude plugin install git-commit@ngram-skills
+```
+
 導入後は`/git-commit:git-commit`で呼び出せる。
 
 ### claude.ai（Cowork・クラウドセッション）
