@@ -16,6 +16,8 @@
 | [skills CLI](https://github.com/vercel-labs/skills) | `npx skills add ngram/skills --skill <name>` |
 | フォルダのコピー | `npx degit ngram/skills/<name> ~/.claude/skills/<name>` |
 
+VS Code拡張のプロンプトでは`/plugin`を使えないので、ターミナルで`claude plugin marketplace add ngram/skills`と`claude plugin install <name>@ngram-skills`を実行する。ターミナルで入れたプラグインは、VS Code拡張でも読み込まれる。
+
 Claude Codeのプラグインとして入れたSkillは、`/<name>:<name>`の形で呼び出す。
 `/<name>`で呼び出したいときは、gh skill、APM、skills CLIのどれかで`~/.claude/skills/`に入れる。
 
@@ -51,7 +53,7 @@ claude.aiに入れたSkillは、Coworkとクラウドセッション、claude.ai
 
 ## mod一覧
 
-modは、Claude Codeの画面に表示を足すプラグインで、Skillとは別に入れる。入れ方は、`/plugin marketplace add ngram/skills`のあと`/plugin install <name>@ngram-skills`。必要なものと使い方は、各modのREADMEにある。
+modは、Claude Codeの画面に表示を足すプラグインで、Skillとは別に入れる。入れ方は、Skillをプラグインとして入れるときと同じ（「インストール」の節。VS Code拡張ではターミナルで実行する）。必要なものと使い方は、各modのREADMEにある。
 
 <!-- skills:mods:begin（scripts/sync-skills.mjs が生成する。このブロックは手で編集しない） -->
 | mod | 説明 | ライセンス |

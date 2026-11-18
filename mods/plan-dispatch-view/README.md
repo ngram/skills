@@ -12,11 +12,18 @@ Skill[plan-dispatch](../../plan-dispatch/)のチームの進捗を、Claude Code
 
 ## インストール
 
-Claude CodeのCLIか、VS Code拡張のプロンプトで、次を入力する。
+Claude CodeのCLIでは、プロンプトに次を入力する。
 
 ```text
 /plugin marketplace add ngram/skills
 /plugin install plan-dispatch-view@ngram-skills
+```
+
+VS Code拡張のプロンプトでは`/plugin`を使えないので、ターミナルで次を実行する。ターミナルで入れたプラグインは、VS Code拡張でも読み込まれる。既に開いているタブにペインのコマンドが出ないときは、VS Codeのウィンドウを再読み込みする。
+
+```bash
+claude plugin marketplace add ngram/skills
+claude plugin install plan-dispatch-view@ngram-skills
 ```
 
 modは、利用者の権限で動くコードである。入れる前に中身を確かめるときは、リポジトリを手元に置いて`claude plugin validate mods/plan-dispatch-view`を実行する。modが呼ぶAPI（ファイルの読み取り、タイマー、ペイン、コマンド、状態）と、使うフック（`session.start`、`command.run`、`prompt.submit`、`ui.close`、`ui.render`）が表示される。

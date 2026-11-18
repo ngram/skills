@@ -14,6 +14,13 @@
 /plugin install japanese-tech-writing@ngram-skills
 ```
 
+VS Code拡張のプロンプトでは`/plugin`を使えないので、ターミナルで次を実行する。ターミナルで入れたプラグインは、VS Code拡張でも読み込まれる。
+
+```bash
+claude plugin marketplace add ngram/skills
+claude plugin install japanese-tech-writing@ngram-skills
+```
+
 導入後は`/japanese-tech-writing:japanese-tech-writing`で呼び出せる。
 
 ### claude.ai（Cowork・クラウドセッション）
