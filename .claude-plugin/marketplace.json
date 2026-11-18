@@ -21,6 +21,11 @@
       "description": "実装の前の計画（Plan）の作成と、plan/YYYYMMDD_機能名.mdへの保存"
     },
     {
+      "name": "plan-dispatch",
+      "source": "./plan-dispatch",
+      "description": "Planやタスクの説明の、複数のClaude Codeのセッションへの振り分け"
+    },
+    {
       "name": "plan-review",
       "source": "./plan-review",
       "description": "CodexかClaudeによる、plan/配下のPlanファイルのレビュー"
@@ -39,6 +44,11 @@
       "name": "spell-check",
       "source": "./spell-check",
       "description": "typosによる英単語の綴りの確認と、誤字の直し方、リポジトリのtyposの設定ファイルへの語の登録（ユーザー辞書）"
+    },
+    {
+      "name": "plan-dispatch-view",
+      "source": "./mods/plan-dispatch-view",
+      "description": "plan-dispatchのチームの進捗（ワーカーとタスクの状態、全体の進み具合）を表示するペイン"
     }
   ]
 }

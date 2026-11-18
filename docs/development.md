@@ -8,13 +8,15 @@
 - claude.aiで使えないSkillは、frontmatterの`metadata`に`claude-ai: unsupported`を書く。そのSkillの`.skill`は作らず、READMEのclaude.aiの節もサポート外の案内になる
 - 各SkillのREADMEのインストール手順、`.claude-plugin/marketplace.json`、READMEのSkill一覧は、`scripts/sync-skills.mjs`が生成する。手で編集しない
 - `git-commit/scripts/check_message.mjs`の一部（全角の文字の判定、体言止めの判定など）は、ほかのスクリプトにコピーしている。元を直したら、コピー先も同じに直す。コピー先の一覧は`tests/copies.test.mjs`の`COPIES`にあり、テストが一致を確かめる
+- mod（Claude Codeの画面に表示を足すフックモジュールのプラグイン）は`mods/<name>/`に置く。`plugin.json`の`name`をディレクトリ名と一致させ、`description`と`license`を書く。modのREADMEは手で書く（生成しない）
 
 ## 変更するとき
 
-1. Skillを足したり、frontmatterを変えたりしたときは、`node scripts/sync-skills.mjs`を実行する
+1. Skillかmodを足したり、frontmatterや`plugin.json`を変えたりしたときは、`node scripts/sync-skills.mjs`を実行する
 2. コミットの前に、`node scripts/sync-skills.mjs --check`と`node --test tests/*.test.mjs`を通す
+3. modを変えたときは、`claude plugin validate mods/<name>`と`claude plugin test mods/<name>`も通す。Claude Code 2.1.325以降が要る。手元のPATHの`claude`が古いときは、VS Code拡張に同梱の`claude.exe`（`~/.vscode/extensions/anthropic.claude-code-<バージョン>-<OS>/resources/native-binary/`）を使う
 
-CIでもこの2つを実行し、あわせて`claude plugin validate .`と`gh skill publish --dry-run`もかける。
+CIでも1〜3の検査を実行し、あわせて`claude plugin validate .`と`gh skill publish --dry-run`もかける。CIのClaude Codeは`@anthropic-ai/claude-code@2.1.325`に固定している。
 
 ## リリース
 

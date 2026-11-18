@@ -11,10 +11,17 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-// ルートの README.md から、Skill 一覧のブロックの目印の行を取り出す。
-const MARKERS = readFileSync(join(ROOT, "README.md"), "utf8")
-  .split("\n")
-  .filter((l) => l.includes("skills:list:begin") || l.includes("skills:list:end"));
+// ルートの README.md から、Skill 一覧と mod 一覧のブロックの目印の行を取り出す。
+const README_LINES = readFileSync(join(ROOT, "README.md"), "utf8").split("\n");
+const MARKERS = README_LINES.filter((l) => l.includes("skills:list:begin") || l.includes("skills:list:end"));
+const MOD_MARKERS = README_LINES.filter((l) => l.includes("skills:mods:begin") || l.includes("skills:mods:end"));
+
+// fixture に mod を1つ置く。
+function addMod(dir, manifest, withMarkers = true) {
+  mkdirSync(join(dir, "mods", "sample-mod", ".claude-plugin"), { recursive: true });
+  writeFileSync(join(dir, "mods", "sample-mod", ".claude-plugin", "plugin.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  if (withMarkers) writeFileSync(join(dir, "README.md"), `# 一覧\n\n${MARKERS.join("\n")}\n\n${MOD_MARKERS.join("\n")}\n`);
+}
 
 function fixture(description, compatibility, license = "MIT") {
   const dir = mkdtempSync(join(tmpdir(), "sync-skills-"));
@@ -90,6 +97,42 @@ test("一覧の表のライセンスの列で、license に書いたファイル
   writeFileSync(join(mit, "LICENSE"), "MIT License\n");
   assert.equal(sync(mit).status, 0);
   assert.match(readFileSync(join(mit, "README.md"), "utf8"), /\| \[MIT\]\(LICENSE\) \|$/mu);
+});
+
+test("mods/ の下の mod を、マーケットプレイスと README の mod 一覧に載せる", () => {
+  const dir = fixture("計画の作成。");
+  writeFileSync(join(dir, "LICENSE"), "MIT License\n");
+  addMod(dir, { name: "sample-mod", description: "進捗を表示するペイン。2文目は動詞でよい。", license: "MIT" });
+  const r = sync(dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /1個のmodを確かめた: sample-mod/u);
+  const catalog = JSON.parse(readFileSync(join(dir, ".claude-plugin", "marketplace.json"), "utf8"));
+  assert.deepEqual(catalog.plugins.map((p) => [p.name, p.source]), [
+    ["sample", "./sample"],
+    ["sample-mod", "./mods/sample-mod"],
+  ]);
+  assert.equal(catalog.plugins[1].description, "進捗を表示するペイン");
+  const readme = readFileSync(join(dir, "README.md"), "utf8");
+  assert.match(readme, /^\| \[sample-mod\]\(mods\/sample-mod\/\) \| 進捗を表示するペイン \| \[MIT\]\(LICENSE\) \|$/mu);
+  assert.equal(sync(dir, "--check").status, 0, "生成したあとの --check が通る");
+});
+
+test("mod の plugin.json の name、description、license を検査する", () => {
+  const dir = fixture("計画の作成。");
+  addMod(dir, { name: "other-name", description: "進捗を表示する。" });
+  const r = sync(dir);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /mods\/sample-mod: plugin\.json の name「other-name」がディレクトリ名「sample-mod」と違う/u);
+  assert.match(r.stderr, /mods\/sample-mod: plugin\.json の description の最初の文が体言止めになっていない/u);
+  assert.match(r.stderr, /mods\/sample-mod: plugin\.json に license が無い/u);
+});
+
+test("mod があるのに README に mod 一覧のマーカーが無ければ失敗する", () => {
+  const dir = fixture("計画の作成。");
+  addMod(dir, { name: "sample-mod", description: "進捗の表示。", license: "MIT" }, false);
+  const r = sync(dir);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /README\.md に mod 一覧のマーカーが無い/u);
 });
 
 test("license に書いたファイルが Skill のディレクトリに無ければ失敗する", () => {

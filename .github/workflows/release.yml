@@ -57,7 +57,13 @@ jobs:
       - name: Test helper scripts
         run: node --test tests/*.test.mjs
       - name: Validate the Claude Code marketplace
-        run: npx --yes @anthropic-ai/claude-code@2.1.293 plugin validate .
+        run: npx --yes @anthropic-ai/claude-code@2.1.325 plugin validate .
+      - name: Validate and test mods
+        run: |
+          for dir in mods/*/; do
+            npx --yes @anthropic-ai/claude-code@2.1.325 plugin validate "$dir"
+            npx --yes @anthropic-ai/claude-code@2.1.325 plugin test "$dir"
+          done
       - name: Validate skills with gh skill
         run: gh skill publish --dry-run
       - name: Build a .skill per skill

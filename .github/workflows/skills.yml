@@ -32,8 +32,15 @@ jobs:
         env:
           REQUIRE_TYPOS: "1"
         run: node --test tests/*.test.mjs
+      # mod の型とテストの道具（claude plugin test）を確かめたバージョンに固定する。release.yml も同じバージョンにそろえる。
       - name: Validate the Claude Code marketplace
-        run: npx --yes @anthropic-ai/claude-code@2.1.293 plugin validate .
+        run: npx --yes @anthropic-ai/claude-code@2.1.325 plugin validate .
+      - name: Validate and test mods
+        run: |
+          for dir in mods/*/; do
+            npx --yes @anthropic-ai/claude-code@2.1.325 plugin validate "$dir"
+            npx --yes @anthropic-ai/claude-code@2.1.325 plugin test "$dir"
+          done
       - name: Validate skills with gh skill
         env:
           GH_TOKEN: ${{ github.token }}

@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "teamId": "",
+  "status": "active",
+  "plan": "",
+  "leader": "",
+  "invokedAs": "/plan-dispatch",
+  "maxAgents": 10,
+  "sessionsAtStart": [],
+  "baselineStatus": [],
+  "workers": [],
+  "tasks": [],
+  "updatedAt": ""
+}
