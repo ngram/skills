@@ -1,0 +1,16 @@
+{
+  "name": "plan-dispatch-view",
+  "version": "0.1.0",
+  "description": "plan-dispatchのチームの進捗（ワーカーとタスクの状態、全体の進み具合）を表示するペイン。plan/.dispatch/のteam.jsonを数秒ごとに読み、表示だけを行う。",
+  "author": { "name": "ngram" },
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "autoOpen": {
+      "type": "boolean",
+      "title": "Open automatically",
+      "description": "/plan-dispatch を呼んだときに、進捗のペインを開く",
+      "default": true
+    }
+  }
+}

@@ -6,6 +6,7 @@ Skillを個別にインストールできるように配布するリポジトリ
 - Skillを足したり、frontmatterを変えたりしたら、`node scripts/sync-skills.mjs`を実行する。各SkillのREADMEのインストール手順、`.claude-plugin/marketplace.json`、`README.md`のSkill一覧を生成するので、これらは手で編集しない
 - コミットの前に`node scripts/sync-skills.mjs --check`と`node --test tests/*.test.mjs`を通す
 - Skillのディレクトリに`bin/`、`hooks/`、`agents/`、`commands/`を作らない。Claude Codeのプラグインの部品として読み込まれる
+- mod（Claude Codeの画面に表示を足すフックモジュールのプラグイン）は`mods/<name>/`に置き、Skillのディレクトリには置かない。`plugin.json`の`name`をディレクトリ名と一致させ、`description`と`license`を書く。`sync-skills.mjs`が、マーケットプレイスとREADMEのmodの表に載せる。modを変えたら、`claude plugin validate mods/<name>`と`claude plugin test mods/<name>`を通す（Claude Code 2.1.325以降。手元のPATHの`claude`が古ければ、VS Code拡張に同梱の`claude.exe`を使う）
 - テストはSkillのディレクトリではなく`tests/`に置く。Skillのディレクトリの中身は、すべて利用者の環境にコピーされる
 - `git-commit/scripts/check_message.mjs`の一部（全角の文字の判定、体言止めの判定など）は、ほかのスクリプトにコピーしている。元を直したら、コピー先も同じに直す。コピー先の一覧は`tests/copies.test.mjs`の`COPIES`にあり、テストが一致を確かめる
 - `gh skill install`で入れたコピー（frontmatterに`metadata.github-*`がある）を戻さない。`gh skill publish`がエラーにする

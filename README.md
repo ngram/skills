@@ -38,6 +38,7 @@ claude.aiに入れたSkillは、Coworkとクラウドセッション、claude.ai
 | [git-commit](git-commit/) | Gitのステージング、日本語のコミットメッセージ案とプルリクエストのタイトル・本文の作成、コミットの手順と書式 | gitとNode.js 18以降が必要。スペルの確認にはspell-checkのSkillが必要で、無ければその確認だけを省略 | [MIT](LICENSE) |
 | [japanese-tech-writing](japanese-tech-writing/) | 日本語の技術文書・書籍原稿の文章規範 | 空白の検査と修正（scripts/fix_spacing.mjs）にはNode.js 18以降が必要 | Unlicense AND MIT。取り込み元の部分はUnlicense（[LICENSE.txt](japanese-tech-writing/LICENSE.txt)）、ngram/skillsで足した部分はMIT（[LICENSE-MIT.txt](japanese-tech-writing/LICENSE-MIT.txt)） |
 | [plan-create](plan-create/) | 実装の前の計画（Plan）の作成と、plan/YYYYMMDD_機能名.mdへの保存 | なし | [MIT](LICENSE) |
+| [plan-dispatch](plan-dispatch/) | Planやタスクの説明の、複数のClaude Codeのセッションへの振り分け | Claude Code（同じマシンのセッション間のメッセージを使う。ネイティブのWindowsではv2.1.234以降）が前提。claude.aiのチャットは対象外 | [MIT](LICENSE) |
 | [plan-review](plan-review/) | CodexかClaudeによる、plan/配下のPlanファイルのレビュー | Claude Code（手元とクラウドセッション）向け（引数の置換とdisable-model-invocationを使う）。bashと、codex CLIかclaude CLIが必要。claude.aiのチャットは対象外 | [MIT](LICENSE) |
 | [readme-writing](readme-writing/) | 初めての人が使い始めるための入口としての、短いREADMEの作成と見直し | 計測のスクリプト（scripts/readme_stats.mjs）にはNode.js 18以降が必要 | [MIT](LICENSE) |
 | [repo-privacy-audit](repo-privacy-audit/) | リポジトリと公開済みのパッケージの、個人情報・秘密情報・機微情報の検査と、値を伏せた報告 | gitとNode.js 18以降が必要。公開済みのパッケージを調べるときは、各レジストリのコマンド（gem、npmなど）とネットワーク接続も必要 | [MIT](LICENSE) |
@@ -47,6 +48,16 @@ claude.aiに入れたSkillは、Coworkとクラウドセッション、claude.ai
 `git-commit`、`plan-create`、`readme-writing`は、`japanese-tech-writing`が入っていれば、書く文章（コミットメッセージやプルリクエストの本文、Plan、README）をその規範に合わせる。
 
 `japanese-tech-writing`は、keiichiro shikano氏が[gist](https://gist.github.com/fd287c3133457c4fd8f5601d34aa817d)で公開しているSkillに、見出しと用語の逐語訳、手順の書き方、表のセルの書き方、日本語と英数字の間の空白の4つの節と、空白を除くスクリプトを足して収録したものである。取り込み元の行は、frontmatterの`license`を除いて変えていない。
+
+## mod一覧
+
+modは、Claude Codeの画面に表示を足すプラグインで、Skillとは別に入れる。入れ方は、`/plugin marketplace add ngram/skills`のあと`/plugin install <name>@ngram-skills`。必要なものと使い方は、各modのREADMEにある。
+
+<!-- skills:mods:begin（scripts/sync-skills.mjs が生成する。このブロックは手で編集しない） -->
+| mod | 説明 | ライセンス |
+| --- | --- | --- |
+| [plan-dispatch-view](mods/plan-dispatch-view/) | plan-dispatchのチームの進捗（ワーカーとタスクの状態、全体の進み具合）を表示するペイン | [MIT](LICENSE) |
+<!-- skills:mods:end -->
 
 ## 開発
 

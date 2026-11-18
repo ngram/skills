@@ -1,12 +1,14 @@
 #!/usr/bin/env node
-// リポジトリ直下の <name>/SKILL.md を集め、frontmatter から次のファイルを生成する。
+// リポジトリ直下の <name>/SKILL.md と、mods/<name>/.claude-plugin/plugin.json を集め、次のファイルを生成する。
 // 依存パッケージは無く、Node.js 18 以降の標準機能だけで動く。
 //
 //   - <name>/README.md のインストール手順のブロック（マーカーの外の手書きの部分は残す）
-//   - .claude-plugin/marketplace.json（Claude Code・Claude Desktop 向けのカタログ）
-//   - README.md の Skill 一覧のブロック
+//   - .claude-plugin/marketplace.json（Claude Code・Claude Desktop 向けのカタログ。Skill と mod の両方を載せる）
+//   - README.md の Skill 一覧のブロックと、mod 一覧のブロック
 //
-// あわせて、Skill を公開できる状態かを検査する（name とディレクトリ名の一致など）。改行と見えない文字は、
+// mod の README.md は生成しない（mod は1つで、入れ方も手で書く）。
+//
+// あわせて、Skill と mod を公開できる状態かを検査する（name とディレクトリ名の一致など）。改行と見えない文字は、
 // リポジトリのすべてのテキストファイルについて調べる。
 //
 // 使い方:
@@ -29,6 +31,10 @@ const SKILL_BEGIN = "<!-- skills:readme:begin（scripts/sync-skills.mjs が生�
 const SKILL_END = "<!-- skills:readme:end -->";
 const LIST_BEGIN = "<!-- skills:list:begin（scripts/sync-skills.mjs が生成する。このブロックは手で編集しない） -->";
 const LIST_END = "<!-- skills:list:end -->";
+const MODS_BEGIN = "<!-- skills:mods:begin（scripts/sync-skills.mjs が生成する。このブロックは手で編集しない） -->";
+const MODS_END = "<!-- skills:mods:end -->";
+// mod（Claude Code のフックモジュールのプラグイン）を置くディレクトリ。Skill のディレクトリには置かない。
+const MODS_DIR = "mods";
 
 // Agent Skills 仕様の name の規則（小文字の英数字とハイフン、先頭と末尾と連続のハイフンは不可）。
 const NAME_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -174,6 +180,40 @@ function inspectSkill(dir) {
   };
 }
 
+function findMods() {
+  const dir = join(ROOT, MODS_DIR);
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && existsSync(join(dir, e.name, ".claude-plugin", "plugin.json")))
+    .map((e) => e.name)
+    .sort();
+}
+
+// mod の plugin.json を読み、公開できる状態かを検査する。
+function inspectMod(dir) {
+  const problems = [];
+  const rel = `${MODS_DIR}/${dir}`;
+  let manifest = {};
+  try {
+    manifest = JSON.parse(readFileSync(join(ROOT, MODS_DIR, dir, ".claude-plugin", "plugin.json"), "utf8"));
+  } catch (e) {
+    problems.push(`.claude-plugin/plugin.json を JSON として読めない（${e.message}）`);
+  }
+  const { name, description, license } = manifest;
+  if (!name) problems.push("plugin.json に name が無い");
+  else {
+    if (name !== dir) problems.push(`plugin.json の name「${name}」がディレクトリ名「${dir}」と違う`);
+    if (!NAME_PATTERN.test(name) || name.length > 64) problems.push(`plugin.json の name「${name}」が命名規則に合わない`);
+  }
+  if (!description) problems.push("plugin.json に description が無い");
+  else {
+    const ending = tableCellEnding(firstSentence(description));
+    if (ending) problems.push(`plugin.json の description の最初の文が体言止めになっていない（「…${ending}」で終わる）。README の mod 一覧の表のセルになるので、体言止めにする`);
+  }
+  if (!license) problems.push("plugin.json に license が無い");
+  return { dir, rel, name: name ?? dir, description: description ?? "", license, problems };
+}
+
 // 説明文の最初の文。マーケットプレイスと一覧の短い説明に使う。1行の説明なので、末尾の句点は付けない。
 function firstSentence(text) {
   const i = text.indexOf("。");
@@ -306,14 +346,30 @@ function listBlock(skills) {
   ].join("\n");
 }
 
-function marketplaceJson(skills) {
+// README の mod 一覧の表。説明とライセンスは plugin.json から取る。必要なものは、mod の README に手で書く。
+function modsBlock(mods) {
+  const rows = mods.map((m) => {
+    const license = m.license === "MIT" && isFile(join(ROOT, "LICENSE")) ? "[MIT](LICENSE)" : (m.license ?? "未設定");
+    return `| [${m.name}](${m.rel}/) | ${firstSentence(m.description)} | ${license} |`;
+  });
+  return [MODS_BEGIN, "| mod | 説明 | ライセンス |", "| --- | --- | --- |", ...rows, MODS_END].join("\n");
+}
+
+function marketplaceJson(skills, mods) {
   const catalog = {
     ...MARKETPLACE,
-    plugins: skills.map((s) => ({
-      name: s.name,
-      source: `./${s.dir}`,
-      description: firstSentence(s.description),
-    })),
+    plugins: [
+      ...skills.map((s) => ({
+        name: s.name,
+        source: `./${s.dir}`,
+        description: firstSentence(s.description),
+      })),
+      ...mods.map((m) => ({
+        name: m.name,
+        source: `./${m.rel}`,
+        description: firstSentence(m.description),
+      })),
+    ],
   };
   return `${JSON.stringify(catalog, null, 2)}\n`;
 }
@@ -330,6 +386,7 @@ function splice(existing, block, begin, end) {
 function main(argv) {
   const check = argv.includes("--check");
   const skills = findSkills().map(inspectSkill);
+  const mods = findMods().map(inspectMod);
   const outputs = new Map();
   const read = (p) => (existsSync(p) ? readFileSync(p, "utf8") : null);
 
@@ -337,10 +394,16 @@ function main(argv) {
     const p = join(ROOT, s.dir, "README.md");
     outputs.set(p, splice(read(p), skillReadmeBlock(s), SKILL_BEGIN, SKILL_END));
   }
-  outputs.set(join(ROOT, ".claude-plugin", "marketplace.json"), marketplaceJson(skills));
+  outputs.set(join(ROOT, ".claude-plugin", "marketplace.json"), marketplaceJson(skills, mods));
   const rootReadme = join(ROOT, "README.md");
   if (read(rootReadme)?.includes(LIST_BEGIN)) {
-    outputs.set(rootReadme, splice(read(rootReadme), listBlock(skills), LIST_BEGIN, LIST_END));
+    let readme = splice(read(rootReadme), listBlock(skills), LIST_BEGIN, LIST_END);
+    if (readme.includes(MODS_BEGIN)) readme = splice(readme, modsBlock(mods), MODS_BEGIN, MODS_END);
+    else if (mods.length > 0) {
+      console.error(`README.md に mod 一覧のマーカーが無い: ${MODS_BEGIN}`);
+      return 1;
+    }
+    outputs.set(rootReadme, readme);
   } else {
     console.error(`README.md に一覧のマーカーが無い: ${LIST_BEGIN}`);
     return 1;
@@ -354,6 +417,12 @@ function main(argv) {
   for (const s of skills) {
     for (const p of s.problems) {
       console.error(`${s.dir}: ${p}`);
+      failed = true;
+    }
+  }
+  for (const m of mods) {
+    for (const p of m.problems) {
+      console.error(`${m.rel}: ${p}`);
       failed = true;
     }
   }
@@ -371,6 +440,7 @@ function main(argv) {
   }
   if (failed) return 1;
   console.log(`${skills.length}個のSkillを確かめた: ${skills.map((s) => s.name).join(", ")}`);
+  if (mods.length > 0) console.log(`${mods.length}個のmodを確かめた: ${mods.map((m) => m.name).join(", ")}`);
   return 0;
 }
 

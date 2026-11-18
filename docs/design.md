@@ -11,6 +11,13 @@ zipを展開した3つのSkillを、1つのGitHubリポジトリ（`ngram/skills
 | `spell-check` | `SKILL.md`、`scripts/check_spelling.mjs` | ngram・MIT | Node.js 18以降、typos。ステージした内容の確認にはgit |
 | `japanese-tech-writing` | `SKILL.md`、`scripts/fix_spacing.mjs`、`LICENSE.txt`、`LICENSE-MIT.txt` | keiichiro shikano・Unlicense（ngram/skillsで足した部分はngram・MIT） | なし（スクリプトにはNode.js 18以降） |
 | `plan-review` | `SKILL.md` | ngram・MIT | bash、codex CLIかclaude CLI |
+| `plan-dispatch` | `SKILL.md`、`assets/team.json`、`assets/task.md`、`assets/worker.md` | ngram・MIT | Claude Code（同じマシンのセッション間のメッセージ。ネイティブのWindowsではv2.1.234以降） |
+
+Skillのほかに、mod（Claude Codeの画面に表示を足すフックモジュールのプラグイン）を1つ収録している。
+
+| mod | ファイル | 作者・ライセンス | 実行に必要なもの |
+|---|---|---|---|
+| `plan-dispatch-view` | `mods/plan-dispatch-view/`の`.claude-plugin/plugin.json`、`hooks/hooks.json`、`hooks/register.tsx`、`types/index.d.ts` | ngram・MIT | Claude Code。VS Code拡張で表示するときは2.1.299以降 |
 
 `japanese-tech-writing`は、gist（`fd287c3133457c4fd8f5601d34aa817d`）のコミット`8f2d576`の内容に、日本語と英数字の間の空白の節とスクリプトを足したものである（「各Skillに加えた変更」の節）。
 zipに入っていたこのgistのクローン（`.git`）は収録していない。
@@ -74,6 +81,12 @@ ZIPは添付しない。理由は次のとおり。
 ├── plan-review/
 │   ├── SKILL.md
 │   └── README.md
+├── plan-dispatch/
+│   ├── SKILL.md                リーダーの手順と、呼び出しの重なりの決まり
+│   ├── assets/                 チームのファイルの雛形（team.json、task.md、worker.md）
+│   └── README.md               生成するブロックの後に、手書きの使い方を置く
+├── mods/
+│   └── plan-dispatch-view/     plan-dispatchの進捗を表示するmod。READMEは手書き
 ├── scripts/sync-skills.mjs     生成と検査のスクリプト
 ├── scripts/package-skills.mjs  claude.ai向けのSkillごとの.skillを作るスクリプト
 ├── scripts/check-skill-updates.mjs  claude.aiに入っているSkillと最新のリリースの.skillを比べるスクリプト
@@ -83,6 +96,8 @@ ZIPは添付しない。理由は次のとおり。
 ├── tests/package-skills.test.mjs
 ├── tests/check-skill-updates.test.mjs
 ├── tests/copies.test.mjs       check_message.mjsのコピーが元と同じかを確かめる
+├── tests/plan-dispatch.test.mjs  plan-dispatchのSKILL.mdと雛形が、手順で使う節とキーを持つかを確かめる
+├── tests/sync-skills.test.mjs  sync-skills.mjsの検査と生成（modの掲載を含む）を確かめる
 ├── docs/design.md              この設計書
 ├── docs/development.md         開発とリリースの手順。READMEの「開発」の節からリンクする
 ├── .github/workflows/skills.yml
@@ -105,6 +120,7 @@ ZIPは添付しない。理由は次のとおり。
 - `<name>/README.md`のインストール手順：マーカーで囲んだブロックだけを書き換え、ブロックの外の手書きの部分は残す
 - `.claude-plugin/marketplace.json`：Skillごとに1つのプラグインの項目
 - `README.md`のSkill一覧：マーカーで囲んだ表。ライセンスの列では、`license`に書いたファイル名（`LICENSE.txt`など）をSkillのディレクトリのファイルへのリンクにし、ファイルを書いていない`MIT`はルートの`LICENSE`へのリンクにする
+- `README.md`のmod一覧：Skill一覧とは別のマーカーで囲んだ表（mod、説明、ライセンス）。説明とライセンスは、modの`plugin.json`の`description`と`license`から取る。必要なもの（VS Code拡張のバージョンなど）は表に入れず、modのREADMEに手で書く。modのREADMEは生成しない（modは1つで、生成するほどの量が無いため）
 
 `--check`を付けると書き込まずに比べ、ずれがあれば終了コード1で終わる。あわせて次の点も検査する。
 
@@ -117,6 +133,7 @@ ZIPは添付しない。理由は次のとおり。
 - リポジトリのすべてのテキストファイルで、改行がLFか、見えない文字（BOM、ゼロ幅文字、双方向制御文字）が無いか
 - Claude Codeがプラグインの部品として読むディレクトリ（`bin/`、`hooks/`、`agents/`、`commands/`）が無いか
 - `gh skill install`が書き込む`metadata.github-*`が残っていないか
+- modの`plugin.json`の`name`とディレクトリ名の一致、`description`（最初の文が体言止めか）と`license`があること
 
 ## Claude Code向けの定義
 
@@ -128,6 +145,7 @@ ZIPは添付しない。理由は次のとおり。
 
 - `source`でSkillのディレクトリを直接指す。直下に`SKILL.md`があり`skills/`の無いプラグインは、1つのSkillとして読み込まれる。`plugin.json`は置かない
 - `description`は、Skillの説明文の最初の文にする
+- modの項目は、`source`を`./mods/<name>`にする。modのディレクトリには`plugin.json`があり、フックモジュールのプラグインとして読み込まれる
 - `version`は書かない。gitで配布するマーケットプレイスでは、コミットごとに新しい版として扱われる
 - プラグインのSkillは`/<プラグイン名>:<Skill名>`で呼び出すので、`/plan-review:plan-review`になる。`/plan-review`で呼びたい利用者は、gh skill、APM、skills CLIのどれかで`~/.claude/skills/`に入れる
 
@@ -192,6 +210,34 @@ ZIPは添付しない。理由は次のとおり。
 - frontmatterへの`compatibility`の追加（スクリプトにNode.js 18以降が要る）
 - 末尾の節の、原稿をファイルに書いたあとの手順への、`spell-check`での綴りの確認の追加（入っていれば）
 
+## plan-dispatchとmod
+
+### エージェントチームとの違い
+
+Claude Codeのエージェントチームは、VS Code拡張では使えない。`plan-dispatch`は、VS Code拡張でそのまま動くことを優先し、次のように作った。
+
+- セッション（タブ）を作る操作は利用者に任せる。VS Code拡張には、会話を始めた状態でタブを作る方法が無い。`vscode://anthropic.claude-code/open?prompt=...`は、手元（VS Code拡張2.1.325、ネイティブのWindows）ではタブを開かなかったので、タブを開く手助けも持たない
+- 利用者が開いた新しいタブを、リーダーが`ListAgents`で見つけ、利用者の確認のあとにワーカーとして招待する。何も入力していないタブも`ListAgents`に出て、ファイルを指したメッセージだけで、そのファイルの手順に従って動くことを確かめた
+- 割り当ては、リーダーだけが行う。ワーカーが空いたタスクを自分で取る仕組み（エージェントチームの自己要求）は持たない
+- ワーカーごとの役割の定義は持たない
+
+### メッセージとファイルの役割
+
+- セッション間のやり取りは、`SendMessage`の短いメッセージ（1行目が`plan-dispatch <チームID> <種類> <対象>`）で行い、中身は`plan/.dispatch/<チームID>/`のファイルに置く。メッセージが届かなかったときも、ファイルを読めば続きから進められる
+- チームの状態（`team.json`）を書くのは、リーダーだけにする。進捗のペイン（mod）は、どのタブでも同じ`team.json`を読むので、同じ状態を示す
+- `notify_when_idle`の通知は、依頼に1つずつ対応付けない。相手が止まる前に付けた複数の購読は、1回止まったときに1つの通知にまとまることを確かめたため。通知を受けたら、`ListAgents`の状態と`team.json`の「最後の依頼」を見て、止まっていて依頼に応えていないときだけ利用者に知らせる
+- タブを閉じたセッションには、終了の通知が届かなかった。リーダーは、メッセージか通知を受けて動くたびに、担当中のワーカーが`ListAgents`にいるかを確かめる
+- ワーカーの手順は、`assets/worker.md`をチームのディレクトリにコピーして渡す。Skillは`disable-model-invocation`なので、招待を受けたセッションはSkillを呼べないため
+
+### modをSkillと分けた理由
+
+- 利用者はSkillをclaude.aiの同期で入れている。Skillとmodを1つのプラグインにすると、プラグインで入れたときに同じSkillが2つになる
+- `.skill`、`gh skill`、APM、`npx skills`で入れたSkillでは、modは動かず、modのファイルがコピーされるだけになる
+- このリポジトリの決まり（Skillのディレクトリに`hooks/`を作らない）に従い、modは`mods/<name>/`に置き、`.skill`にも含めない
+- 版のずれは、`team.json`の`version`をmodが確かめ、知らない版なら表示せずに更新を促すことで扱う
+
+modは、Skillを呼んだプロンプト（`prompt.submit`の`e.command.name`が3つの呼び出し名のどれか）で自動でペインを開く（`userConfig`の`autoOpen`で無効にできる）。`team.json`の変更を知らせる仕組みがmodに無いので、ペインを開いている間、3秒ごとに読み直す。
+
 ## frontmatterの扱い
 
 - Claude Code独自のフィールド（`argument-hint`、`disable-model-invocation`）は残す。`gh skill publish`もAPMも、これを理由に拒否しない
@@ -243,13 +289,17 @@ pushとプルリクエストで`.github/workflows/skills.yml`が次を実行す�
 - `node scripts/sync-skills.mjs --check`
 - `node --test tests/*.test.mjs`（`check_message.mjs`、`check_spelling.mjs`、`fix_spacing.mjs`、`scan.mjs`、`package-skills.mjs`、`check-skill-updates.mjs`の動作確認と、`check_message.mjs`のコピーの一致の確認）。`check_spelling.mjs`のテストのために、typos 1.51.1を`pip`で入れ、`REQUIRE_TYPOS=1`を設定する
 - `claude plugin validate .`
+- `claude plugin validate mods/<name>`と`claude plugin test mods/<name>`（modごと）
 - `gh skill publish --dry-run`
+
+Claude Codeは、`@anthropic-ai/claude-code@2.1.325`に固定する。modの型とテストの道具（`claude plugin test`）を、このバージョンで確かめたため。リリースの`release.yml`も、同じ検査を同じバージョンでかける。
 
 ## 確かめたこと
 
 ローカルの作業ツリーから、経路ごとに別の作業ディレクトリへ1つずつ入れて確かめた。
 
 - Claude Code 2.1.293：`claude plugin validate . --strict`が通過した。隔離した設定ディレクトリで3つのプラグインを入れ、`claude plugin details`でSkillが1つずつ読み込まれていた
+- Claude Code 2.1.325（VS Code拡張に同梱の`claude.exe`、Windows）：`mods/`を`source`に持つ項目を加えたあとも、`claude plugin validate . --strict`が通過した。`claude plugin validate mods/plan-dispatch-view`が通り、`claude plugin test mods/plan-dispatch-view`の7件が通った
 - gh 2.102.0：`gh skill publish --dry-run`はエラーなし。警告は`git-commit`と`plan-review`の`license`の欠落と、タグの保護ルールが無いことだけだった。`gh skill install --from-local`で3つを1つずつ入れ、`SKILL.md`のfrontmatter以外は原本と一致した
 - skills CLI 1.7.1：`--list`で3つを認識し、`--skill git-commit --copy`で入れたファイルは原本と一致した
 - APM 0.33.0：`apm install <パス>/plan-review`、`<パス>/git-commit`、`apm install -g <パス>/git-commit`のどれでも、原本と一致するファイルが`.claude/skills/`に入った
