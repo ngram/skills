@@ -71,6 +71,16 @@ test("一覧の表とマーケットプレイスには、description の最初�
   assert.equal(catalog.plugins[0].description, "計画の作成とファイルへの保存");
 });
 
+test("Skill の README のインストールの節に、/plugin のコマンドと、VS Code 拡張向けにターミナルで実行する claude plugin のコマンドを入れる", () => {
+  const dir = fixture("計画の作成。");
+  const r = sync(dir);
+  assert.equal(r.status, 0, r.stderr);
+  const readme = readFileSync(join(dir, "sample", "README.md"), "utf8");
+  assert.match(readme, /^\/plugin install sample@ngram-skills$/mu);
+  assert.match(readme, /^claude plugin marketplace add ngram\/skills$/mu);
+  assert.match(readme, /^claude plugin install sample@ngram-skills$/mu);
+});
+
 test("SKILL.md にドル記号と数字の並びがあれば、Claude Code が引数で置き換えるとして失敗する", () => {
   const dir = fixture("計画の作成。");
   writeFileSync(join(dir, "sample", "SKILL.md"), "---\nname: sample\ndescription: 計画の作成。\nlicense: MIT\n---\n\n# sample\n\n```bash\ncase \"$1\" in\n```\n");
