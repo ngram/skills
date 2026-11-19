@@ -1,6 +1,6 @@
 {
   "name": "plan-dispatch-view",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "plan-dispatchのチームの進捗（ワーカーとタスクの状態、全体の進み具合）を表示するペイン。plan/.dispatch/のteam.jsonを数秒ごとに読み、表示だけを行う。",
   "author": { "name": "ngram" },
   "license": "MIT",

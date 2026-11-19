@@ -24,26 +24,43 @@ const TEAM = {
   status: 'active',
   plan: 'plan/20261115_sample.md',
   leader: 'skills-e1',
+  // 既定のテストでは、このタブがリーダーとする。
+  leaderSessionId: 'session-me',
   invokedAs: '/anthropic-skills:plan-dispatch',
   maxAgents: 10,
   sessionsAtStart: ['skills-e1'],
   baselineStatus: [],
   workers: [
-    { id: 'W01', session: 'skills-d3', status: 'working', task: 'T02', lastRequest: { kind: 'assign', task: 'T02', answered: false } },
-    { id: 'W02', session: 'skills-00', status: 'idle', task: null, lastRequest: { kind: 'assign', task: 'T01', answered: true } },
+    { id: 'WA01', session: 'skills-d3', status: 'working', task: 'T02', lastRequest: { kind: 'assign', task: 'T02', answered: false } },
+    { id: 'WA02', session: 'skills-00', status: 'idle', task: null, lastRequest: { kind: 'assign', task: 'T01', answered: true } },
   ],
   tasks: [
-    { id: 'T01', title: '雛形を書く', status: 'done', worker: 'W02', dependsOn: [] },
-    { id: 'T02', title: 'テストを書く', status: 'assigned', worker: 'W01', dependsOn: ['T01'] },
+    { id: 'T01', title: '雛形を書く', status: 'done', worker: 'WA02', dependsOn: [] },
+    { id: 'T02', title: 'テストを書く', status: 'assigned', worker: 'WA01', dependsOn: ['T01'] },
     { id: 'T03', title: 'READMEを書く', status: 'pending', worker: null, dependsOn: [] },
   ],
   updatedAt: '2026-11-17T04:00:00Z',
 }
 
-// チームのディレクトリを置き換える。reads は fs.read が返す本文の列で、使い切ったら最後の値を返し続ける。
-function engine(on: On, reads: string[] | null) {
+// メインの作業ツリーのルートと、セッションのID。セッションは、worktreeの中で動いているものとする。
+const REPO = 'C:/work/repo'
+const WORKTREE = 'C:/work/repo/.claude/worktrees/fix'
+const ME = 'session-me'
+const BASE = `${REPO}/plan/.dispatch`
+
+// チームのディレクトリを置き換える。teams は、チームのディレクトリ名から、fs.read が返す本文の列への対応。
+// 本文の列は、使い切ったら最後の値を返し続ける。mtimes は、team.json の更新時刻（無ければ1）。
+function engine(
+  on: On,
+  teams: Record<string, string[]> | null,
+  options: { mtimes?: Record<string, number>; sessionId?: string; repo?: boolean } = {},
+) {
   const opened: string[] = []
-  let n = 0
+  const paths: string[] = []
+  const counts: Record<string, number> = {}
+  // エンジンは、Windowsではパスの区切りを「\」にして渡すので、「/」にそろえて比べる。
+  const norm = (path: string) => path.replace(/\\/gu, '/')
+  const nameOf = (path: string) => norm(path).slice(BASE.length + 1).split('/')[0] ?? ''
   on('command.register', () => ({ value: { command: 'plan-dispatch-view' } }))
   on('ui.open', (_, e) => {
     opened.push(e.id)
@@ -51,28 +68,47 @@ function engine(on: On, reads: string[] | null) {
   })
   // 読み直しのタイマーは、テストが時計を進めない限り動かない。
   mock.clock(on)
-  on('fs.exists', () => ({ value: reads !== null }))
-  on('fs.list', () => ({
-    value: reads === null ? [] : [{ name: '20261115_sample', kind: 'dir', size: 0, mtimeMs: 0, isLink: false }],
+  on('session.repo', () => ({
+    value: options.repo === false ? null : { root: REPO, remote: null, internal: false, name: null },
   }))
-  on('fs.stat', () => ({ value: { kind: 'file', size: 100, mtimeMs: 1, isLink: false } }))
-  on('fs.read', () => {
-    const text = reads?.[Math.min(n, (reads?.length ?? 1) - 1)] ?? ''
-    n++
-    return { value: text }
+  on('session.root', () => ({ value: WORKTREE }))
+  on('session.id', () => ({ value: options.sessionId ?? ME }))
+  on('fs.exists', (_, e) => {
+    paths.push(norm(e.path))
+    return { value: teams !== null && norm(e.path) === BASE }
+  })
+  on('fs.list', (_, e) => {
+    paths.push(norm(e.path ?? ''))
+    return {
+      value: Object.keys(teams ?? {}).map(name => ({ name, kind: 'dir', size: 0, mtimeMs: 0, isLink: false })),
+    }
+  })
+  on('fs.stat', (_, e) => ({
+    value: { kind: 'file', size: 100, mtimeMs: options.mtimes?.[nameOf(e.path)] ?? 1, isLink: false },
+  }))
+  on('fs.read', (_, e) => {
+    paths.push(norm(e.path))
+    const name = nameOf(e.path)
+    const reads = teams?.[name] ?? ['']
+    const n = counts[name] ?? 0
+    counts[name] = n + 1
+    return { value: reads[Math.min(n, reads.length - 1)] ?? '' }
   })
   on('prompt.submit', (_, e) => ({ text: e.text }))
   on('command.run', () => ({ text: '' }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
-  return opened
+  return { opened, paths }
 }
+
+// 1つのチーム（20261115_sample）だけがあるときの teams。
+const one = (...reads: string[]) => ({ '20261115_sample': reads })
 
 async function submit($: Engine, name: string, args: string) {
   await $.prompt.submit({ ...TYPED, text: `/${name} ${args}`, command: { name, args } })
 }
 
 test('ワーカーとタスクの表と進み具合を、vscodeとterminalの画面に描く', async ($, on) => {
-  engine(on, [JSON.stringify(TEAM)])
+  engine(on, one(JSON.stringify(TEAM)))
   await $.session.start({ cwd: '/', surface: 'vscode', isInteractive: true })
   await submit($, 'plan-dispatch', 'plan/20261115_sample.md')
 
@@ -89,10 +125,10 @@ test('ワーカーとタスクの表と進み具合を、vscodeとterminalの画
     expect(await ui.find({ type: 'Text', text: /^Task$/ }), `${surface}の画面にTaskの見出しが無い`).toBeTruthy()
     // 行（キーはワーカーIDかタスクID）のセルが、この順に並ぶ。
     const rows: [string, RegExp][] = [
-      ['W01', /^• W01:\s*Working\s*T02\s*skills-d3$/],
-      ['W02', /^• W02:\s*Idle\s*-\s*skills-00$/],
-      ['T01', /^☑ T01:\s*Done\s*W02\s*雛形を書く$/],
-      ['T02', /^☐ T02:\s*Working\s*W01\s*テストを書く$/],
+      ['WA01', /^• WA01:\s*Working\s*T02\s*skills-d3$/],
+      ['WA02', /^• WA02:\s*Idle\s*-\s*skills-00$/],
+      ['T01', /^☑ T01:\s*Done\s*WA02\s*雛形を書く$/],
+      ['T02', /^☐ T02:\s*Working\s*WA01\s*テストを書く$/],
       ['T03', /^☐ T03:\s*Pending\s*-\s*READMEを書く$/],
     ]
     for (const [key, cells] of rows) {
@@ -108,7 +144,7 @@ test('タスクIDが3桁でも、列の幅に収まる', async ($, on) => {
     const id = `T${String(i + 1).padStart(3, '0')}`
     return { id, title: `タスク${i + 1}`, status: 'pending', worker: null, dependsOn: [] }
   })
-  engine(on, [JSON.stringify({ ...TEAM, tasks })])
+  engine(on, one(JSON.stringify({ ...TEAM, tasks })))
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   await submit($, 'plan-dispatch', 'x')
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -120,7 +156,7 @@ test('タスクIDが3桁でも、列の幅に収まる', async ($, on) => {
 })
 
 test('Team、Worker、Taskの節で、1列目と状態の列の幅をそろえる', async ($, on) => {
-  engine(on, [JSON.stringify(TEAM)])
+  engine(on, one(JSON.stringify(TEAM)))
   await $.session.start({ cwd: '/', surface: 'vscode', isInteractive: true })
   await submit($, 'plan-dispatch', 'x')
   const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
@@ -132,8 +168,8 @@ test('Team、Worker、Taskの節で、1列目と状態の列の幅をそろえ�
     'Status:',
     'Leader:',
     'Progress:',
-    '• W01:',
-    '• W02:',
+    '• WA01:',
+    '• WA02:',
     '☑ T01:',
     '☐ T02:',
     '☐ T03:',
@@ -141,12 +177,12 @@ test('Team、Worker、Taskの節で、1列目と状態の列の幅をそろえ�
   // 2列目：ワーカーとタスクの状態。
   expect(await column(8)).toEqual(['Working', 'Idle', 'Done', 'Working', 'Pending'])
   // 3列目：担当のタスクかワーカー。
-  expect(await column(5)).toEqual(['T02', '-', 'W02', 'W01', '-'])
+  expect(await column(5)).toEqual(['T02', '-', 'WA02', 'WA01', '-'])
   await ui.unmount()
 })
 
 test('状態の語にだけ、テーマの色と太字を付ける', async ($, on) => {
-  engine(on, [JSON.stringify(TEAM)])
+  engine(on, one(JSON.stringify(TEAM)))
   await $.session.start({ cwd: '/', surface: 'vscode', isInteractive: true })
   await submit($, 'plan-dispatch', 'x')
   const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
@@ -160,14 +196,14 @@ test('状態の語にだけ、テーマの色と太字を付ける', async ($, o
   expect(await color(/^Pending$/)).toBe('inactive')
   expect((await label(/^Active$/))?.props.bold).toBe(true)
   // 状態の語のほかは、色も太字も付けない。
-  const id = await ui.find({ type: 'Text', text: /^• W01:$/ })
+  const id = await ui.find({ type: 'Text', text: /^• WA01:$/ })
   expect(id?.props.color).toBeUndefined()
   expect(id?.props.bold).toBeFalsy()
   await ui.unmount()
 })
 
 test('3つの呼び出し名のどれでもペインを開き、ほかのプロンプトでは開かない', async ($, on) => {
-  const opened = engine(on, [JSON.stringify(TEAM)])
+  const { opened } = engine(on, one(JSON.stringify(TEAM)))
   await $.session.start({ cwd: '/', surface: 'vscode', isInteractive: true })
 
   await $.prompt.submit({ ...TYPED, text: 'ふつうのプロンプト' })
@@ -181,7 +217,7 @@ test('3つの呼び出し名のどれでもペインを開き、ほかのプロ�
 })
 
 test('autoOpen が無効なら、Skill を呼んでも開かない', { options: { autoOpen: false } }, async ($, on) => {
-  const opened = engine(on, [JSON.stringify(TEAM)])
+  const { opened } = engine(on, one(JSON.stringify(TEAM)))
   await $.session.start({ cwd: '/', surface: 'vscode', isInteractive: true })
   await submit($, 'anthropic-skills:plan-dispatch', 'plan/20261115_sample.md')
   expect(opened.length).toBe(0)
@@ -197,7 +233,7 @@ test('チームが無ければ、その旨を描く', async ($, on) => {
 })
 
 test('JSONが壊れていれば、前の表示を残す', async ($, on) => {
-  engine(on, [JSON.stringify(TEAM), '{"version": 1, "teamId": "書きかけ'])
+  engine(on, one(JSON.stringify(TEAM), '{"version": 1, "teamId": "書きかけ'))
   await $.session.start({ cwd: '/', surface: 'vscode', isInteractive: true })
   await submit($, 'plan-dispatch', 'x')
   await submit($, 'plan-dispatch', 'x')
@@ -207,17 +243,17 @@ test('JSONが壊れていれば、前の表示を残す', async ($, on) => {
 })
 
 test('知らない版の team.json は表示せず、modの更新を促す', async ($, on) => {
-  engine(on, [JSON.stringify({ ...TEAM, version: 2 })])
+  engine(on, one(JSON.stringify({ ...TEAM, version: 2 })))
   await $.session.start({ cwd: '/', surface: 'vscode', isInteractive: true })
   await submit($, 'plan-dispatch', 'x')
   const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
   expect((await ui.find({ type: 'Text', text: /modを更新/ }))?.text).toMatch(/版（2）/)
-  expect(await ui.find({ type: 'Text', text: /^W01/ })).toBeFalsy()
+  expect(await ui.find({ type: 'Text', text: /^WA01/ })).toBeFalsy()
   await ui.unmount()
 })
 
 test('狭いとき（プロンプトの上）は、要約だけを描く', async ($, on) => {
-  engine(on, [JSON.stringify(TEAM)])
+  engine(on, one(JSON.stringify(TEAM)))
   await $.session.start({ cwd: '/', surface: 'vscode', isInteractive: true })
   await submit($, 'plan-dispatch', 'x')
   const ui = await $.ui.mount({
@@ -233,7 +269,7 @@ test('狭いとき（プロンプトの上）は、要約だけを描く', async
 
 test('行の切り詰めを画面に任せ、チームの状態はチームIDとは別の行に描く', async ($, on) => {
   const long = { ...TEAM, teamId: '20261117_a-very-long-plan-name', status: 'done' }
-  engine(on, [JSON.stringify(long)])
+  engine(on, one(JSON.stringify(long)))
   await $.session.start({ cwd: '/', surface: 'vscode', isInteractive: true })
   await submit($, 'plan-dispatch', 'x')
   for (const placement of ['dock', 'inline'] as const) {
@@ -249,3 +285,65 @@ test('行の切り詰めを画面に任せ、チームの状態はチームIDと
     await ui.unmount()
   }
 })
+
+test('worktreeの中のセッションでも、メインの作業ツリーのルートの plan/.dispatch を読む', async ($, on) => {
+  const { paths } = engine(on, one(JSON.stringify(TEAM)))
+  await $.session.start({ cwd: WORKTREE, surface: 'vscode', isInteractive: true })
+  await submit($, 'plan-dispatch', 'x')
+  expect(paths.length).toBeGreaterThan(0)
+  expect(paths.filter(p => !p.startsWith(BASE)), '作業ディレクトリ（worktree）を基準に探している').toEqual([])
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  expect(await ui.find({ type: 'Text', text: /^20261115_sample$/ })).toBeTruthy()
+  await ui.unmount()
+})
+
+test('gitのリポジトリでなければ、セッションのプロジェクトのルートを基準にし、探した場所を表示する', async ($, on) => {
+  engine(on, null, { repo: false })
+  await $.session.start({ cwd: WORKTREE, surface: 'vscode', isInteractive: true })
+  await submit($, 'plan-dispatch', 'x')
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  expect((await ui.find({ type: 'Text', text: /チームがありません/ }))?.text).toContain(`${WORKTREE}/plan/.dispatch`)
+  await ui.unmount()
+})
+
+test('チームが複数あれば、このタブのセッションが記録されているチームを、より新しいチームより先に表示する', async ($, on) => {
+  const mine = { ...TEAM, teamId: '202611181000', leaderSessionId: 'other', workers: [{ ...TEAM.workers[0], sessionId: ME }] }
+  const newer = { ...TEAM, teamId: '202611181100', leaderSessionId: 'other' }
+  engine(on, { '202611181000': [JSON.stringify(mine)], '202611181100': [JSON.stringify(newer)] }, {
+    mtimes: { '202611181000': 1, '202611181100': 2 },
+  })
+  await $.session.start({ cwd: REPO, surface: 'vscode', isInteractive: true })
+  await submit($, 'plan-dispatch', 'x')
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  expect(await ui.find({ type: 'Text', text: /^202611181000$/ }), 'ワーカーとして記録されているチームを表示していない').toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /参加していないチーム/ })).toBeFalsy()
+  await ui.unmount()
+})
+
+test('このタブが関わるチームが無ければ、最も新しい進行中のチームを、参加していないことを添えて表示する', async ($, on) => {
+  const older = { ...TEAM, teamId: '202611181000', leaderSessionId: 'other' }
+  const done = { ...TEAM, teamId: '202611181200', leaderSessionId: 'other', status: 'done' }
+  engine(on, { '202611181000': [JSON.stringify(older)], '202611181200': [JSON.stringify(done)] }, {
+    mtimes: { '202611181000': 1, '202611181200': 2 },
+  })
+  await $.session.start({ cwd: REPO, surface: 'vscode', isInteractive: true })
+  await submit($, 'plan-dispatch', 'x')
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  expect(await ui.find({ type: 'Text', text: /^202611181000$/ }), '完了したチームより、進行中のチームを先に表示していない').toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /このタブが参加していないチーム/ })).toBeTruthy()
+  await ui.unmount()
+})
+
+test('join で参加したタブは、そのチームを表示する', async ($, on) => {
+  const target = { ...TEAM, teamId: '202611181000', leaderSessionId: 'other' }
+  const newer = { ...TEAM, teamId: '202611181100', leaderSessionId: 'other' }
+  engine(on, { '202611181000': [JSON.stringify(target)], '202611181100': [JSON.stringify(newer)] }, {
+    mtimes: { '202611181000': 1, '202611181100': 2 },
+  })
+  await $.session.start({ cwd: REPO, surface: 'vscode', isInteractive: true })
+  await submit($, 'plan-dispatch', 'join 202611181000 WA03 skills-e1')
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  expect(await ui.find({ type: 'Text', text: /^202611181000$/ })).toBeTruthy()
+  await ui.unmount()
+})
+

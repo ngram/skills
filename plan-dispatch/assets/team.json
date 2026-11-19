@@ -1,9 +1,12 @@
 {
   "version": 1,
   "teamId": "",
+  "teamLetter": "",
   "status": "active",
   "plan": "",
   "leader": "",
+  "leaderRef": "",
+  "leaderSessionId": "",
   "invokedAs": "/plan-dispatch",
   "maxAgents": 10,
   "sessionsAtStart": [],

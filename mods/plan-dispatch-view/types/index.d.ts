@@ -23,17 +23,18 @@ export type Team = {
   updatedAt: string
 }
 
-// ペインに描くもの。チームが無い、知らない版、読めたチーム。
+// ペインに描くもの。チームが無い（探したディレクトリ）、知らない版、読めたチーム。
+// isOwn は、このタブのセッションがリーダーかワーカーとして記録されているチームかどうか。
 export type View =
-  | { kind: 'none' }
+  | { kind: 'none'; dir: string }
   | { kind: 'unknown-version'; version: string }
-  | { kind: 'team'; team: Team }
+  | { kind: 'team'; team: Team; isOwn: boolean }
 
 declare module 'claude-code' {
   interface PluginState {
     'plan-dispatch-view': {
       view: Shaped<View>
-      // join で参加したタブで表示するチームID。空なら最も新しいチーム。
+      // join で参加したタブで表示するチームID。空なら、このタブのセッションのIDで選ぶ。
       teamId: Shaped<string>
     }
   }
