@@ -49,7 +49,24 @@ test("呼び出しの重なりの決まりが、7つの場合を順に持つ", (
   assert.match(items[0], /ワーカーとして参加中/u);
   assert.match(items[1], /続きから進める/u);
   assert.match(items[3], /引き継ぐか/u);
-  assert.match(items[5], /\/plan-dispatch stop/u);
+  // 自分がリーダーの別のチームが進行中なら、断らずに今のチームにタスクを足す。
+  assert.match(items[5], /断らずに、今のチームにタスクを足す/u);
+  assert.doesNotMatch(items[5], /：断る/u);
+});
+
+test("進行中のチームに頼まれた作業は、テーマが違っても今のチームのタスクとして足す", () => {
+  const add = section(skill, "進行中のチームへのタスクの追加");
+  assert.match(add, /`\/plan-dispatch`を付けたかどうかにかかわらず、今のチームのタスクとして足す/u);
+  assert.match(add, /テーマが違っていても、そのことで新しいチームに分けることを勧めない/u);
+  assert.match(add, /新しいチームに分けるのは、利用者が明示的に頼んだとき/u);
+  assert.match(section(skill, "リーダーの手順"), /「進行中のチームへのタスクの追加」に従う/u);
+});
+
+test("リーダーはタスクを自分で実行せず、プロジェクトのファイルを編集しない", () => {
+  const rules = section(skill, "守る決まり");
+  assert.match(rules, /リーダーは、タスクを自分で実行しない/u);
+  assert.match(rules, /プロジェクトのファイルは編集しない/u);
+  assert.match(rules, /作業が小さくても、ワーカーに割り当てる/u);
 });
 
 test("セッションの数の上限を、引数、環境変数、既定の10の順に決める", () => {
@@ -58,12 +75,50 @@ test("セッションの数の上限を、引数、環境変数、既定の10の
   assert.ok(m, "上限の決め方が、引数、環境変数、既定の10の順で書かれていない");
 });
 
-test("ワーカーIDとタスクIDを、W01とT01の形で振り、100件以上なら3桁にする", () => {
+test("ワーカーIDにチームの文字を入れ（WA01、WB01）、タスクIDは T01 の形で、100件以上なら3桁にする", () => {
   const files = section(skill, "チームのファイル");
-  assert.match(files, /ワーカーは`W`、タスクは`T`に、1から始まる番号を付ける（`W01`、`T01`）/u);
+  assert.match(files, /ほかの進行中のチームの`teamLetter`と重ならない最初の文字を、`A`、`B`…`Z`の順に選ぶ/u);
+  assert.match(files, /`W`、チームの文字、1から始まる番号をつなげる（`WA01`、`WA02`…、2つ目のチームなら`WB01`…）/u);
+  assert.match(files, /番号は2桁に0で埋め、上限（`maxAgents`）が100以上なら3桁（`WA001`）にする/u);
+  assert.doesNotMatch(skill, /`W[A-Z]\d`/u);
+  assert.match(files, /`teamLetter`：チームの文字/u);
   assert.match(files, /タスクの数が100以上なら、すべてのタスクIDを3桁（`T001`）にする/u);
-  // 古い形（worker01）が残っていない。
-  assert.doesNotMatch(skill, /worker0\d/u);
+  // 古い形（worker01、W01）が残っていない。
+  assert.doesNotMatch(skill, /worker0\d|`W0\d`/u);
+  assert.doesNotMatch(read(SKILL_DIR, "README.md"), /`W0\d`|join <チームID> W0\d/u);
+});
+
+test("チームのファイルを、gitのメインの作業ツリーのルートの plan/.dispatch に置き、メッセージのパスを絶対パスにする", () => {
+  const files = section(skill, "チームのファイル");
+  assert.match(files, /メインの作業ツリーのルート（`git worktree list --porcelain`の最初の`worktree`の行のパス）/u);
+  assert.match(files, /メッセージに書くパスは、絶対パスにする/u);
+  assert.match(worker, /`git worktree list --porcelain`の最初の`worktree`の行のパス/u);
+});
+
+test("日時から作るチームIDは、ハイフンの無い YYYYMMDDHHMM にする", () => {
+  assert.match(section(skill, "チームのファイル"), /日時（`YYYYMMDDHHMM`）/u);
+  assert.doesNotMatch(skill, /YYYYMMDD-HHMM/u);
+});
+
+test("リーダーとワーカーのセッションのIDを team.json に書き、mod がそれでこのタブのチームを選ぶ", () => {
+  const files = section(skill, "チームのファイル");
+  assert.match(files, /`leaderSessionId`：リーダーのセッションのID（環境変数`CLAUDE_CODE_SESSION_ID`の値/u);
+  assert.match(files, /`sessionId`（セッションのID。`join`のメッセージの2行目から取る/u);
+  assert.match(section(skill, "参加の受け付け"), /セッションのIDを、そのワーカーの`sessionId`に書く/u);
+  assert.match(section(worker, "参加する"), /`printenv CLAUDE_CODE_SESSION_ID`/u);
+  const mod = read(ROOT, "mods", "plan-dispatch-view", "hooks", "register.tsx");
+  assert.match(mod, /record\.leaderSessionId === sessionId/u);
+  assert.match(mod, /\.sessionId === sessionId/u);
+});
+
+test("/rename で名前が変わっても、参照から新しい名前を探して送り直す", () => {
+  const renamed = section(skill, "名前が変わったとき");
+  assert.match(renamed, /`ListAgents`のセッション名（メッセージの宛先）も変わり、古い名前では届かなくなる/u);
+  assert.match(renamed, /記録した参照と同じ参照のセッションを探して、その名前に送り直す/u);
+  assert.match(section(skill, "チームのファイル"), /`ref`（セッションの参照）/u);
+  const join = section(worker, "参加する");
+  assert.match(join, /`\/rename <ワーカーID>`（例：`\/rename WA01`）/u);
+  assert.match(section(worker, "守ること"), /`leaderRef`と同じ参照/u);
 });
 
 test("タスクの題名を18文字以内にする決まりが、リーダーの手順と雛形の task.md にある", () => {
@@ -80,7 +135,7 @@ test("雛形のファイルがあり、SKILL.md がその名前で指す", () =>
 
 test("雛形の team.json が JSON として読め、mod と SKILL.md が使うキーを持つ", () => {
   const team = JSON.parse(read(SKILL_DIR, "assets", "team.json"));
-  for (const key of ["version", "teamId", "status", "plan", "leader", "invokedAs", "maxAgents", "sessionsAtStart", "baselineStatus", "workers", "tasks", "updatedAt"]) {
+  for (const key of ["version", "teamId", "teamLetter", "status", "plan", "leader", "leaderRef", "leaderSessionId", "invokedAs", "maxAgents", "sessionsAtStart", "baselineStatus", "workers", "tasks", "updatedAt"]) {
     assert.ok(key in team, `team.json に ${key} が無い`);
     // 配列のキーは `workers[]` の形で書く。
     assert.match(section(skill, "チームのファイル"), new RegExp(`\`${key}(\\[\\])?\``, "u"), `SKILL.md に ${key} の説明が無い`);

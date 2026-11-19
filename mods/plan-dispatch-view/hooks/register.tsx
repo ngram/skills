@@ -5,20 +5,22 @@ import type { Task, Team, View, Worker } from '../types'
 
 const PANE = 'plan-dispatch-view'
 const TITLE = 'plan-dispatch'
+// チームのディレクトリ。gitのメインの作業ツリーのルート（gitでなければセッションのプロジェクトのルート）からの位置。
+// 相対パスは作業ディレクトリが基準になり、worktreeに移ると見失うので、使わない。
 const DIR = 'plan/.dispatch'
 // team.json を読み直す間隔。ファイルの変更を知らせる仕組みが無いので、数秒ごとに読む。
 const INTERVAL_MS = 3000
 // team.json の版。知らない版は表示せず、modの更新を促す。
 const KNOWN_VERSION = 1
-// Skill の呼び出し名（スラッシュを除く）。入れ方で変わる。
 // ペインの行の列の幅（桁）。最後の列（セッション名、タスクの題名）をなるべく長くするため、各列は最も長い値に1〜2桁の余白を足しただけにする。
 // 1列目は項目名かID（最も長い「Progress:」。タスクIDが3桁でも「☑ T001」で収まる）、2列目は状態（最も長い「Invited」「Working」など7桁）、
-// 3列目は担当のタスクかワーカー（「T01」「W01」。3桁の「T001」でも収まる）。
+// 3列目は担当のタスクかワーカー（「T01」「WA01」。3桁の「T001」「WA001」でも収まる）。
 const COLUMNS = [10, 8, 5]
-const SKILL_NAMES =new Set(['plan-dispatch', 'plan-dispatch:plan-dispatch', 'anthropic-skills:plan-dispatch'])
+// Skill の呼び出し名（スラッシュを除く）。入れ方で変わる。
+const SKILL_NAMES = new Set(['plan-dispatch', 'plan-dispatch:plan-dispatch', 'anthropic-skills:plan-dispatch'])
 
-const view = atom({ plugin: 'plan-dispatch-view', key: 'view' } as const, { kind: 'none' } as View, {
-  shape: 'view-1',
+const view = atom({ plugin: 'plan-dispatch-view', key: 'view' } as const, { kind: 'none', dir: DIR } as View, {
+  shape: 'view-2',
 })
 const pinned = atom({ plugin: 'plan-dispatch-view', key: 'teamId' } as const, '', { shape: 'team-id-1' })
 
@@ -76,42 +78,75 @@ function toTeam(data: Record<string, unknown>): Team {
 // 読み直しのタイマー。ペインを開いたときに始め、閉じたときに止める。modを読み直すと、作り直される。
 let timer: { cancel: () => void } | undefined
 
-// 表示する team.json を選ぶ。join で参加したタブはそのチーム、それ以外は更新時刻が最も新しいチーム。
-async function teamFile($: EngineInterface): Promise<string | null> {
-  const id = await read($, pinned)
-  if (id !== '') {
-    const file = `${DIR}/${id}/team.json`
-    if (await $.fs.exists(file)) return file
-  }
-  const entries = await $.fs.list(DIR).catch(() => [])
-  let best: { file: string; mtimeMs: number } | null = null
-  for (const entry of entries) {
-    if (entry.kind !== 'dir') continue
-    const file = `${DIR}/${entry.name}/team.json`
-    const stat = await $.fs.stat(file).catch(() => undefined)
-    if (stat && stat.kind === 'file' && (best === null || stat.mtimeMs > best.mtimeMs)) best = { file, mtimeMs: stat.mtimeMs }
-  }
-  return best?.file ?? null
+// チームのディレクトリの絶対パス。worktreeの中のセッションでも、メインの作業ツリーのものを使う（リーダーもそこに書く）。
+async function dispatchDir($: EngineInterface): Promise<string> {
+  const repo = await $.session.repo().catch(() => null)
+  const root = repo?.root ?? (await $.session.root())
+  return `${root.replace(/\\/gu, '/').replace(/\/$/u, '')}/${DIR}`
 }
 
-// team.json を読み直す。書き込みの途中で読めないか、JSONとして壊れていれば、前の表示を残す。
+type Candidate = { dir: string; record: Record<string, unknown>; mtimeMs: number }
+
+// このタブのセッションが、リーダーかワーカーとして記録されているか。
+function involves(record: Record<string, unknown>, sessionId: string): boolean {
+  if (sessionId === '') return false
+  if (record.leaderSessionId === sessionId) return true
+  const workers = Array.isArray(record.workers) ? record.workers : []
+  return workers.some(w => typeof w === 'object' && w !== null && (w as Record<string, unknown>).sessionId === sessionId)
+}
+
+// 表示するチームを、次の順に選ぶ。
+// 1. join で参加したタブで覚えたチーム
+// 2. このタブのセッションが記録されているチーム（複数なら更新時刻が最も新しいもの）
+// 3. ほかのタブのチーム（進行中のうち最も新しいもの。無ければ最も新しいもの）。isOwn を false にして、そのことを表示する
+function choose(candidates: Candidate[], pinnedId: string, sessionId: string): { chosen: Candidate; isOwn: boolean } | null {
+  const newest = (list: Candidate[]) => list.reduce<Candidate | null>((a, b) => (a === null || b.mtimeMs > a.mtimeMs ? b : a), null)
+  const pinnedTeam = candidates.find(c => c.dir === pinnedId)
+  if (pinnedId !== '' && pinnedTeam) return { chosen: pinnedTeam, isOwn: true }
+  const own = newest(candidates.filter(c => involves(c.record, sessionId)))
+  if (own) return { chosen: own, isOwn: true }
+  const other = newest(candidates.filter(c => c.record.status === 'active')) ?? newest(candidates)
+  return other ? { chosen: other, isOwn: false } : null
+}
+
+// team.json を読み直す。
+// 書き込みの途中で今のチームの team.json が読めなかったときと、ディレクトリの一覧を読めなかったときは、前の表示を残す。
 async function refresh($: EngineInterface): Promise<void> {
-  const file = await teamFile($)
-  if (file === null) {
-    await update($, view, () => ({ kind: 'none' }) as View)
-    return
-  }
-  let data: unknown
+  const base = await dispatchDir($)
+  let entries: { name: string; kind: string }[]
   try {
-    data = JSON.parse(await $.fs.read(file))
+    entries = (await $.fs.exists(base)) ? await $.fs.list(base) : []
   } catch {
     return
   }
-  if (typeof data !== 'object' || data === null) return
-  const record = data as Record<string, unknown>
+  const current = await read($, view)
+  const shownId = current.kind === 'team' ? current.team.teamId : ''
+  const candidates: Candidate[] = []
+  for (const entry of entries) {
+    if (entry.kind !== 'dir') continue
+    const file = `${base}/${entry.name}/team.json`
+    const stat = await $.fs.stat(file).catch(() => undefined)
+    if (!stat || stat.kind !== 'file') continue
+    let data: unknown
+    try {
+      data = JSON.parse(await $.fs.read(file))
+    } catch {
+      if (entry.name === shownId) return
+      continue
+    }
+    if (typeof data === 'object' && data !== null) {
+      candidates.push({ dir: entry.name, record: data as Record<string, unknown>, mtimeMs: stat.mtimeMs })
+    }
+  }
+  const picked = choose(candidates, await read($, pinned), await $.session.id().catch(() => ''))
+  if (picked === null) {
+    await update($, view, () => ({ kind: 'none', dir: base }) as View)
+    return
+  }
+  const { record } = picked.chosen
   const next: View =
     record.version === KNOWN_VERSION
-      ? { kind: 'team', team: toTeam(record) }
+      ? { kind: 'team', team: toTeam(record), isOwn: picked.isOwn }
       : { kind: 'unknown-version', version: String(record.version) }
   await update($, view, () => next)
 }
@@ -210,7 +245,7 @@ export const register: Register = (on, options) => {
     )
 
     if (v.kind === 'none') {
-      return <Text dimColor>チームがありません（plan/.dispatch/にteam.jsonが無い）。</Text>
+      return <Text dimColor>チームがありません（{v.dir}にteam.jsonが無い）。</Text>
     }
     if (v.kind === 'unknown-version') {
       return (
@@ -233,7 +268,7 @@ export const register: Register = (on, options) => {
     if (e.props.placement === 'inline') {
       return (
         <Box flexDirection="column">
-          <Line bold>{team.teamId}</Line>
+          <Line bold>{v.isOwn ? team.teamId : `${team.teamId}（このタブが参加していないチーム）`}</Line>
           <Progress label="Progress:" value={done} max={max} valueText={`${done} / ${total}`} />
           <Line>
             <Label status={state} />
@@ -247,6 +282,7 @@ export const register: Register = (on, options) => {
     return (
       <Box flexDirection="column">
         <Text bold>Team</Text>
+        {!v.isOwn && <Line dimColor>このタブが参加していないチーム（最も新しいチーム）</Line>}
         <Row id="team-id" cells={[<Line>ID:</Line>, <Line>{team.teamId}</Line>]} />
         <Row id="team-status" cells={[<Line>Status:</Line>, <Label status={state} />]} />
         <Row id="team-leader" cells={[<Line>Leader:</Line>, <Line>{team.leader}</Line>]} />
