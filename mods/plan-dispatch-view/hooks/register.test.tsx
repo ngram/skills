@@ -43,8 +43,9 @@ const TEAM = {
 }
 
 // メインの作業ツリーのルートと、セッションのID。セッションは、worktreeの中で動いているものとする。
-const REPO = 'C:/work/repo'
-const WORKTREE = 'C:/work/repo/.claude/worktrees/fix'
+// ドライブ名の無い絶対パスにする。Linuxでは「C:/…」が相対パスとして扱われるため。
+const REPO = '/work/repo'
+const WORKTREE = '/work/repo/.claude/worktrees/fix'
 const ME = 'session-me'
 const BASE = `${REPO}/plan/.dispatch`
 
@@ -58,8 +59,8 @@ function engine(
   const opened: string[] = []
   const paths: string[] = []
   const counts: Record<string, number> = {}
-  // エンジンは、Windowsではパスの区切りを「\」にして渡すので、「/」にそろえて比べる。
-  const norm = (path: string) => path.replace(/\\/gu, '/')
+  // エンジンは、Windowsではパスの区切りを「\」にし、ドライブ名（「C:」）を付けて渡すので、「/」にそろえ、ドライブ名を除いて比べる。
+  const norm = (path: string) => path.replace(/\\/gu, '/').replace(/^[A-Za-z]:/u, '')
   const nameOf = (path: string) => norm(path).slice(BASE.length + 1).split('/')[0] ?? ''
   on('command.register', () => ({ value: { command: 'plan-dispatch-view' } }))
   on('ui.open', (_, e) => {
