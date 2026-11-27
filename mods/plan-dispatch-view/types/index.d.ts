@@ -14,6 +14,10 @@ export type Task = {
   status: string
   worker: string | null
   dependsOn: string[]
+  // 担当のワーカーの最後の報告（done か blocked）を一言で表した言葉。リーダーが team.json に書く。まだ無ければ空。
+  note: string
+  // タスクのファイルの「結果」の「要約」の、先頭の3行まで。まだ書かれていなければ空。
+  summary: string[]
 }
 
 export type Team = {
@@ -34,17 +38,12 @@ export type View =
   | { kind: 'unknown-version'; version: string }
   | { kind: 'team'; team: Team; dir: string; self: string }
 
-// 結果の節を開いているタスク。teamId のチームのものだけが有効で、表示するチームが変わったら空にする。
-// results は、タスクIDから「結果」の節の本文への対応。キーがあるタスクが開いている。null は、タスクのファイルを読めなかったこと。
-export type Opened = { teamId: string; results: Record<string, string | null> }
-
 declare module 'claude-code' {
   interface PluginState {
     'plan-dispatch-view': {
       view: Shaped<View>
       // join で参加したタブで表示するチームID。空なら、このタブのセッションのIDで選ぶ。
       teamId: Shaped<string>
-      opened: Shaped<Opened>
     }
   }
 }

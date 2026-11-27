@@ -71,7 +71,7 @@ license: MIT
 - `baselineStatus`：チームを作った時点の`git status --porcelain`の行（gitのリポジトリでなければ空）
 - `teamLetter`：チームの文字（`A`など）
 - `workers[]`：`id`（`WA01`…）、`session`（セッション名）、`ref`（セッションの参照）、`sessionId`（セッションのID。`join`のメッセージの2行目から取る。無ければ空）、`status`（`invited`、`working`、`idle`、`gone`）、`task`（担当中のタスクID）、`lastRequest`（最後の依頼。`kind`、`task`、`answered`）
-- `tasks[]`：`id`（`T01`…）、`title`（18文字以内。リーダーの手順の3）、`status`（`pending`、`assigned`、`done`、`blocked`）、`worker`、`dependsOn`
+- `tasks[]`：`id`（`T01`…）、`title`（18文字以内。リーダーの手順の3）、`status`（`pending`、`assigned`、`done`、`blocked`）、`worker`、`dependsOn`、`note`（担当のワーカーの最後の報告（`done`か`blocked`）の2行目の一言。まだ報告が無ければ書かない。進捗のペインが、タスクの題名の後ろに表示する）
 - `updatedAt`：最後に書いた日時（ISO 8601）
 
 `team.json`は、読んだ内容を少しずつ書き換えるのではなく、いつもファイル全体を書き直す。
@@ -89,8 +89,8 @@ license: MIT
 | `join` | ワーカー → リーダー | ワーカーID | 参加の連絡。2行目に、自分のセッション名とセッションのIDを、空白で区切って書く |
 | `decline` | ワーカー → リーダー | ワーカーID | 招待を断る。2行目に理由を書く |
 | `assign` | リーダー → ワーカー | タスクID | タスクの割り当て。2行目にタスクのファイルの絶対パスを書く |
-| `done` | ワーカー → リーダー | タスクID | タスクの完了 |
-| `blocked` | ワーカー → リーダー | タスクID | 進められない。2行目に理由を書く |
+| `done` | ワーカー → リーダー | タスクID | タスクの完了。2行目に結果を一言（20文字以内）で書く |
+| `blocked` | ワーカー → リーダー | タスクID | 進められない。2行目に理由を一言（20文字以内）で書く |
 | `answer` | リーダー → ワーカー | タスクID | `blocked`への答え |
 | `stop` | リーダー → ワーカー | `all` | チームの終了（完了か中止） |
 | `leader` | リーダー → ワーカー | 新しいリーダーのセッション名 | リーダーの引き継ぎ |
@@ -126,9 +126,9 @@ license: MIT
 11. `done`を受けたら、次の順に確認する
     1. タスクのファイルの結果の節と、変えたファイルの一覧を読む
     2. 範囲の外の変更が無いかを見る（「範囲の外の変更の見つけ方」）。あれば利用者に示す。戻さない
-    3. `team.json`のタスクを`done`にし、ワーカーの`task`を空に、`lastRequest.answered`を`true`に、`status`を`idle`にする
+    3. `team.json`のタスクを`done`にし、メッセージの2行目の一言をタスクの`note`に書く。ワーカーの`task`を空に、`lastRequest.answered`を`true`に、`status`を`idle`にする
     4. 先に終わる必要があるタスクがすべて終わったタスクを、空いているワーカーに割り当てる（10の1と2）
-12. `blocked`を受けたら、`team.json`のタスクを`blocked`にし、`lastRequest.answered`を`true`にする。答えられることは答え、利用者の判断が要ることは利用者に尋ねる。答えは`answer`のメッセージで、`notify_when_idle`を付けて送り、タスクを`assigned`に、`lastRequest`を`answer`（`answered`は`false`）に書き直す
+12. `blocked`を受けたら、`team.json`のタスクを`blocked`にし、メッセージの2行目の一言をタスクの`note`に書き、`lastRequest.answered`を`true`にする。答えられることは答え、利用者の判断が要ることは利用者に尋ねる。答えは`answer`のメッセージで、`notify_when_idle`を付けて送り、タスクを`assigned`に、`lastRequest`を`answer`（`answered`は`false`）に書き直す
 13. `notify_when_idle`の通知を受けたら、「通知の見分け方」に従う
 14. すべてのタスクが`done`になったら、全体のテストを実行し、結果をまとめて利用者に示す。`team.json`の`status`を`done`にし、各ワーカーに`stop`を送る。コミットは、利用者に頼まれたときだけ行う
 15. `stop`で呼ばれたら、自分がリーダーの進行中のチームの`status`を`stopped`にし、各ワーカーに`stop`を送る

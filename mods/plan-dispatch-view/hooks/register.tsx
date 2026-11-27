@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { Color, EngineInterface, Register, RenderChildren } from 'claude-code'
 
-import type { Opened, Task, Team, View, Worker } from '../types'
+import type { Task, Team, View, Worker } from '../types'
 
 const PANE = 'plan-dispatch-view'
 const TITLE = 'plan-dispatch'
@@ -12,20 +12,32 @@ const DIR = 'plan/.dispatch'
 const INTERVAL_MS = 3000
 // team.json の版。知らない版は表示せず、modの更新を促す。
 const KNOWN_VERSION = 1
-// ペインの行の列の幅（桁）。最後の列（セッション名、タスクの題名）をなるべく長くするため、各列は最も長い値に1〜2桁の余白を足しただけにする。
-// 1列目は項目名かID（最も長い「Progress:」。タスクIDが3桁でも「☑ T001」で収まる）、2列目は状態（最も長い「Invited」「Working」など7桁）、
-// 3列目は担当のタスクかワーカー（「T01」「WA01」。3桁の「T001」「WA001」でも収まる）。
-const COLUMNS = [10, 8, 5]
+// Teamの節の行の1列目（項目名。最も長い「Progress:」）の幅（桁）。値の列は、残りの幅を使う。
+const COLUMNS = [10]
+// ワーカーは、セッション名（タブの見出しの名前）で表示する。ワーカーID（WA01など）はリーダーとワーカーの間の記号で、利用者はタブの名前で見分けるため。
+// セッション名は、表示幅（全角2桁、半角1桁）がNAME_MAXを超えたら末尾を「…」にする。リンク（Markdown）は画面の側で切り詰められないので、ここで切る。
+const NAME_MAX = 16
+// Workerの節は、ワーカーを表の列として横に並べるので、ワーカーの名前はWORKER_NAME_MAX桁で省略する。Taskの行の右端の担当のワーカーも同じ長さにする。
+const WORKER_NAME_MAX = 8
+const width = (c: string) => ((c.codePointAt(0) ?? 0) > 0xff ? 2 : 1)
+function shorten(s: string, max = NAME_MAX): string {
+  if ([...s].reduce((n, c) => n + width(c), 0) <= max) return s
+  let out = ''
+  let used = 0
+  for (const c of s) {
+    if (used + width(c) > max - 1) break
+    out += c
+    used += width(c)
+  }
+  return `${out}…`
+}
 // Skill の呼び出し名（スラッシュを除く）。入れ方で変わる。
 const SKILL_NAMES = new Set(['plan-dispatch', 'plan-dispatch:plan-dispatch', 'anthropic-skills:plan-dispatch'])
 
 const view = atom({ plugin: 'plan-dispatch-view', key: 'view' } as const, { kind: 'none', dir: DIR } as View, {
-  shape: 'view-4',
+  shape: 'view-5',
 })
 const pinned = atom({ plugin: 'plan-dispatch-view', key: 'teamId' } as const, '', { shape: 'team-id-1' })
-const opened = atom({ plugin: 'plan-dispatch-view', key: 'opened' } as const, { teamId: '', results: {} } as Opened, {
-  shape: 'opened-1',
-})
 
 // ボタンからVS Codeのコマンドに渡す値の形。team.json の値をそのままシェル（Windowsの cmd.exe）に渡さないよう、この形のものだけを使う。
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu
@@ -43,14 +55,31 @@ function resultSection(markdown: string): string {
     .trim()
 }
 
-// セッションのタブを開くURIと、ファイルを開くURI。パスは部分ごとに符号化し、空白や「&」がシェルで解釈されないようにする。
+// 「結果」の節の中の「### 要約」から、空でない行を先頭の3行まで取り出す。箇条書きの記号は除く。
+// ワーカーは要約を3行以内で書く決まり（worker.md）なので、Taskの節では、タスクの題名の下にこの3行を表示する。
+const SUMMARY_LINES = 3
+function summaryOf(result: string): string[] {
+  const lines = result.split('\n')
+  const start = lines.findIndex(l => /^### 要約\s*$/u.test(l))
+  if (start === -1) return []
+  const end = lines.findIndex((l, i) => i > start && /^#{2,3} /u.test(l))
+  return lines
+    .slice(start + 1, end === -1 ? undefined : end)
+    .map(l => l.replace(/^\s*[-*]\s+/u, '').trim())
+    .filter(l => l !== '')
+    .slice(0, SUMMARY_LINES)
+}
+
+// セッションのタブを開くURI。セッションIDはSESSION_IDの形のものだけを渡すので、シェルで解釈される文字は入らない。
 const sessionUri = (sessionId: string) => `vscode://anthropic.claude-code/open?session=${sessionId}`
-const fileUri = (path: string) =>
-  `vscode://file/${path
-    .replace(/^\//u, '')
-    .split('/')
-    .map((part, i) => (i === 0 && /^[A-Za-z]:$/u.test(part) ? part : encodeURIComponent(part)))
-    .join('/')}`
+
+// ペインのジャンプは、ボタンではなくMarkdownのリンクとして描く（VS Code拡張のボタンは目立ちすぎるため）。
+// Markdownのリンクは https: でないと描かれないので、どこにもつながらない .invalid のURLにセッションIDを入れ、押されたらmodが取り出して開く。
+const JUMP_PREFIX = 'https://plan-dispatch.invalid/session/'
+const jumpHref = (sessionId: string) => `${JUMP_PREFIX}${sessionId}`
+const sessionOfHref = (href: string) => (href.startsWith(JUMP_PREFIX) ? href.slice(JUMP_PREFIX.length) : '')
+// リンクの文字（タスクの題名など）に含まれるMarkdownの記号を、そのまま描くようにエスケープする。
+const escapeMarkdown = (s: string) => s.replace(/[\\`*_[\]()#+\-.!|<>~]/gu, c => `\\${c}`)
 
 // URIを、VS CodeのCLI（code --open-url）で開く。ペインのリンクは https: 以外を開けず、explorer.exe 経由では
 // Claude Code の拡張のURIが届かないため。Windows（ルートがドライブ名で始まる）では、code.cmd を cmd.exe で実行する。
@@ -73,28 +102,47 @@ const TEAM_STATUS: Record<string, Status> = {
   done: { label: 'Done', color: 'success' },
   stopped: { label: 'Stopped', color: 'warning' },
 }
-const WORKER_STATUS: Record<string, Status> = {
-  invited: { label: 'Invited', color: 'suggestion' },
-  working: { label: 'Working', color: 'claude' },
-  idle: { label: 'Idle' },
-  gone: { label: 'Gone', color: 'error' },
-}
-const TASK_STATUS: Record<string, Status> = {
-  pending: { label: 'Pending', color: 'inactive' },
-  assigned: { label: 'Working', color: 'claude' },
-  done: { label: 'Done', color: 'success' },
-  blocked: { label: 'Blocked', color: 'error' },
-}
 // 知らない状態は、そのままの語を色なしで表示する。
 const statusOf = (table: Record<string, Status>, key: string): Status => table[key] ?? { label: key }
 
-// 依存関係の図のノードの色。SVGは画像として描かれ、テーマの色の名前を使えないので、ライトとダークのどちらの背景でも読める中間の明るさの色にする。
-// 進行中、完了、停止は塗りつぶして白い字にする。未着手と知らない状態は枠だけにして、塗りつぶしたものと見分けやすくする。
-const GRAPH_FILL: Record<string, string> = { assigned: '#c96442', done: '#2f8f5b', blocked: '#c94040' }
+// ワーカーとタスクの状態の色。VS Code拡張のタブのアイコンの点の色と意味をそろえる。ペインでは同じ意味の絵文字（DOT_EMOJI）で示し、依存関係の図ではこの色で塗る。
+// タブのアイコンは、ターンを終えて未読ならオレンジ（#D97757）、権限の確認など利用者の応答を待っていれば青（#3B82F6）になる。
+// そこで、作業を終えて報告済み（結果を見る段階）をオレンジ、blockedで答えを待っているのを青にし、作業中は緑にする。
+const DOT = {
+  working: '#2f8f5b',
+  done: '#D97757',
+  waiting: '#3B82F6',
+  none: '#8a8f98',
+  gone: '#c94040',
+} as const
+type Dot = keyof typeof DOT
+// Workerの節はMarkdownの表で描き、Markdownでは文字に色を付けられないので、状態は同じ意味の色の絵文字で示す。
+// Taskの節も、Workerの表とそろえて同じ絵文字にする。
+const DOT_EMOJI: Record<Dot, string> = { working: '🟢', done: '🟠', waiting: '🔵', none: '⚪', gone: '🔴' }
+// Workerの表のセルの左右の余白。改行なしの空白（U+00A0）2つ。
+const CELL_PAD = '  '
+const TASK_DOT: Record<string, Dot> = { pending: 'none', assigned: 'working', done: 'done', blocked: 'waiting' }
+const taskDot = (t: Task): Dot => TASK_DOT[t.status] ?? 'none'
+// ワーカーの状態。担当中のタスクがblockedなら青、作業中なら緑、終えたタスクがあって次を待っていればオレンジ。
+function workerDot(w: Worker, tasks: Task[]): Dot {
+  if (w.status === 'gone') return 'gone'
+  if (w.status === 'working') return tasks.find(t => t.id === w.task)?.status === 'blocked' ? 'waiting' : 'working'
+  if (w.status === 'idle' && tasks.some(t => t.worker === w.id && t.status === 'done')) return 'done'
+  return 'none'
+}
+
+// 依存関係の図のノードの色。DOTの色にする。SVGは画像として描かれ、テーマの色の名前を使えないので、色の値で指定する。
+// 進行中、完了、判断待ちは塗りつぶして白い字にする。未着手と知らない状態は枠だけにして、塗りつぶしたものと見分けやすくする。
+const GRAPH_FILL: Record<string, string> = { assigned: DOT.working, done: DOT.done, blocked: DOT.waiting }
 const GRAPH_GRAY = '#8a8f98'
-// ノードの大きさと間隔（ピクセル）。ノードにはタスクIDだけを書く。題名はTaskの節にあり、図に入れると幅が足りなくなるため。
-const NODE_W = 56
-const NODE_H = 24
+// ノードの大きさと間隔（ピクセル）。ノードには、1行目に「タスクID:」、2行目に題名を書く。
+// ノードの幅は、最も長い題名に合わせてそろえる（題名は18文字以内の決まりなので、最大でおよそ200ピクセル）。
+const NODE_MIN_W = 56
+const NODE_H = 40
+const NODE_PAD_X = 8
+// 題名の文字の大きさ（ピクセル）と、幅の見積もり。全角は文字の大きさと同じ幅、半角は等幅のフォントのおよそ0.6倍の幅とする。
+const TITLE_SIZE = 11
+const textWidth = (s: string, size: number) => [...s].reduce((w, c) => w + ((c.codePointAt(0) ?? 0) > 0xff ? size : size * 0.6), 0)
 const GAP_X = 32
 const GAP_Y = 10
 const PAD = 2
@@ -105,7 +153,7 @@ const escapeXml = (s: string) =>
 // 依存関係の図のSVG。依存の無いタスクを左端の列に置き、各タスクを依存先のうち最も右の列の、1つ右の列に置く。
 // 依存先が完了した矢印は実線、未完了の矢印は破線にして、着手できるタスクを見分けられるようにする。
 // 依存が1つも無ければ null を返す（図を描かない）。存在しないタスクIDへの依存は無視する。
-function dependencyGraph(tasks: Task[]): { source: string; alt: string } | null {
+function dependencyGraph(tasks: Task[]): { source: string; alt: string; width: number; height: number } | null {
   const byId = new Map(tasks.map(t => [t.id, t]))
   const edges = tasks.flatMap(t => t.dependsOn.filter(d => byId.has(d) && d !== t.id).map(d => ({ from: d, to: t.id })))
   if (edges.length === 0) return null
@@ -150,6 +198,7 @@ function dependencyGraph(tasks: Task[]): { source: string; alt: string } | null 
     ids.forEach((id, r) => row.set(id, r))
   })
 
+  const NODE_W = Math.ceil(Math.max(NODE_MIN_W, ...tasks.map(t => textWidth(t.title, TITLE_SIZE) + NODE_PAD_X * 2)))
   const pos = new Map<string, { x: number; y: number }>()
   columns.forEach((ids, c) =>
     ids.forEach((id, r) => pos.set(id, { x: PAD + c * (NODE_W + GAP_X), y: PAD + r * (NODE_H + GAP_Y) })),
@@ -180,7 +229,10 @@ function dependencyGraph(tasks: Task[]): { source: string; alt: string } | null 
     const rect = fill
       ? `<rect x="${x}" y="${y}" width="${NODE_W}" height="${NODE_H}" rx="6" fill="${fill}"/>`
       : `<rect x="${x + 0.75}" y="${y + 0.75}" width="${NODE_W - 1.5}" height="${NODE_H - 1.5}" rx="6" fill="none" stroke="${GRAPH_GRAY}" stroke-width="1.5"/>`
-    const label = `<text x="${x + NODE_W / 2}" y="${y + NODE_H / 2}" fill="${fill ? '#ffffff' : GRAPH_GRAY}">${escapeXml(t.id)}</text>`
+    const color = fill ? '#ffffff' : GRAPH_GRAY
+    const label =
+      `<text x="${x + NODE_W / 2}" y="${y + 13}" fill="${color}">${escapeXml(t.id)}:</text>` +
+      `<text x="${x + NODE_W / 2}" y="${y + 28}" fill="${color}" font-size="${TITLE_SIZE}" font-weight="400">${escapeXml(t.title)}</text>`
     return rect + label
   })
   const source = [
@@ -192,7 +244,7 @@ function dependencyGraph(tasks: Task[]): { source: string; alt: string } | null 
     '</g></svg>',
   ].join('')
   const alt = `タスクの依存関係：${edges.map(e => `${e.to}は${e.from}に依存`).join('、')}`
-  return { source, alt }
+  return { source, alt, width, height }
 }
 
 const text = (v: unknown): string => (typeof v === 'string' ? v : '')
@@ -214,6 +266,8 @@ function toTeam(data: Record<string, unknown>): Team {
     status: text(t.status),
     worker: typeof t.worker === 'string' && t.worker !== '' ? t.worker : null,
     dependsOn: Array.isArray(t.dependsOn) ? t.dependsOn.filter((d): d is string => typeof d === 'string') : [],
+    note: text(t.note).trim(),
+    summary: [],
   }))
   return {
     teamId: text(data.teamId),
@@ -292,7 +346,6 @@ async function refresh($: EngineInterface): Promise<void> {
     // team.json が1つも無いときと、ほかのタブのチームだけがあるときとで、表示を分ける。
     const kind = candidates.length === 0 ? 'none' : 'not-created'
     await update($, view, () => ({ kind, dir: base }) as View)
-    await update($, opened, () => ({ teamId: '', results: {} }))
     return
   }
   const { record } = picked
@@ -300,10 +353,18 @@ async function refresh($: EngineInterface): Promise<void> {
     await update($, view, () => ({ kind: 'unknown-version', version: String(record.version) }) as View)
     return
   }
-  const team = toTeam(record)
   const dir = `${base}/${picked.dir}`
+  // 各タスクの要約を、タスクのファイルから読む。読めなかったときは、前に読めた要約を残す（ワーカーが書いている途中のことがあるため）。
+  const previous = current.kind === 'team' && current.team.teamId === text(record.teamId) ? current.team.tasks : []
+  const parsed = toTeam(record)
+  const tasks: Task[] = []
+  for (const t of parsed.tasks) {
+    const result = TASK_ID.test(t.id) ? await readResult($, dir, t.id) : ''
+    const summary = result === null ? (previous.find(p => p.id === t.id)?.summary ?? []) : summaryOf(result)
+    tasks.push({ ...t, summary })
+  }
+  const team: Team = { ...parsed, tasks }
   await update($, view, () => ({ kind: 'team', team, dir, self }) as View)
-  await refreshResults($, team, dir)
 }
 
 // タスクのファイルを読み、「結果」の節を返す。読めなければ null を返す。
@@ -315,28 +376,6 @@ async function readResult($: EngineInterface, dir: string, taskId: string): Prom
   }
 }
 
-// 開いているタスクの結果を読み直す。表示するチームが変わったら閉じ、チームから消えたタスクも閉じる。
-// 読めなかったときは、前に読めた結果を残す（ワーカーが書いている途中のことがあるため）。
-async function refreshResults($: EngineInterface, team: Team, dir: string): Promise<void> {
-  const current = await read($, opened)
-  if (current.teamId !== team.teamId) {
-    await update($, opened, () => ({ teamId: team.teamId, results: {} }))
-    return
-  }
-  const ids = Object.keys(current.results).filter(id => team.tasks.some(t => t.id === id))
-  const results: Record<string, string | null> = {}
-  for (const id of ids) results[id] = (await readResult($, dir, id)) ?? current.results[id] ?? null
-  await update($, opened, () => ({ teamId: team.teamId, results }))
-}
-
-// タスクの結果の節を開くか、閉じる。
-async function toggleResult($: EngineInterface, team: Team, dir: string, taskId: string): Promise<void> {
-  const current = await read($, opened)
-  const results = current.teamId === team.teamId ? { ...current.results } : {}
-  if (taskId in results) delete results[taskId]
-  else results[taskId] = await readResult($, dir, taskId)
-  await update($, opened, () => ({ teamId: team.teamId, results }))
-}
 
 async function openPane($: EngineInterface): Promise<boolean> {
   const placed = await $.ui.open({ id: PANE, title: TITLE })
@@ -394,7 +433,7 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text, Progress, Button } = $.ui.resolve(e)
+    const { Box, Text, Progress, Markdown } = $.ui.resolve(e)
     const v = await read($, view)
     // 行の切り詰めは、画面の側に任せる。VS Codeでは文字の幅がまちまちで、bodyColumnsから数えると、描ける幅よりかなり手前で切れるため。
     const Line = (p: { bold?: boolean; dimColor?: boolean; children: RenderChildren }) => (
@@ -425,9 +464,17 @@ export const register: Register = (on, options) => {
         )}
       </Box>
     )
-    const Heading = (p: { children: string }) => (
-      <Box marginTop={1}>
-        <Text bold>{p.children}</Text>
+    // 節の見出し。左に、テーマの色の縦線を付けて、節の区切りを見分けやすくする。
+    // Boxには辺ごとの枠線が無いので、縦線は「▍」の文字で描く（ターミナルでも描ける）。最初の節（Team）だけ、上を空けない。
+    const Heading = (p: { children: string; first?: boolean }) => (
+      <Box key={`heading-${p.children}`} marginTop={p.first ? 0 : 1}>
+        {/* 見出しの文字は、本文（body）より1段大きいheadingにする。ターミナルは文字の大きさが1つなので、変わらない。 */}
+        <Text color="claude" size="title">
+          ▍
+        </Text>
+        <Text bold size="title">
+          {p.children}
+        </Text>
       </Box>
     )
 
@@ -479,39 +526,63 @@ export const register: Register = (on, options) => {
     // タブへのジャンプは、VS Code拡張の画面だけで描く（ターミナルには前面に出すタブが無い）。
     // このタブ自身のセッションと、IDの形でない値はボタンにしない。
     const canJump = (sessionId: string) => e.surface === 'vscode' && SESSION_ID.test(sessionId) && sessionId !== self
-    const jump = (sessionId: string) => () => openUri($, sessionUri(sessionId), dir)
-    const openedNow = await read($, opened)
-    const results = openedNow.teamId === team.teamId ? openedNow.results : {}
-    // IDのボタン。plain にして、ほかの行の文字と同じ見た目と幅にする。
-    const IdButton = (p: { id: string; label: string; dimColor?: boolean; onPress: () => Promise<void> }) => (
-      <Button key={p.id} plain dimColor={p.dimColor} onPress={p.onPress}>
-        {p.label}
-      </Button>
-    )
-    // 開いたタスクの「結果」の節。タスクのファイルの本文をそのまま行ごとに描く。
-    const ResultBody = (p: { task: Task; body: string | null }) => (
-      <Box key={`result-${p.task.id}`} flexDirection="column" marginLeft={2} marginBottom={1}>
-        {p.body === null ? (
-          <Text dimColor>タスクのファイルを読めません（{`${dir}/tasks/${p.task.id}.md`}）。</Text>
-        ) : p.body === '' ? (
-          <Text dimColor>タスクのファイルに「結果」の節がありません。</Text>
-        ) : (
-          p.body.split('\n').map((line, i) => <Text key={`result-${p.task.id}-${i}`}>{line === '' ? ' ' : line}</Text>)
-        )}
-        {e.surface === 'vscode' && (
-          <Box>
-            <Button key={`file-${p.task.id}`} plain dimColor onPress={() => openUri($, fileUri(`${dir}/tasks/${p.task.id}.md`), dir)}>
-              ファイルを開く
-            </Button>
-          </Box>
-        )}
-      </Box>
-    )
+    // ワーカーIDから、そのワーカーのセッションID。タスクの行から担当のワーカーのタブへジャンプするときに使う。
+    const sessionOf = (workerId: string | null) => team.workers.find(w => w.id === workerId)?.sessionId ?? ''
+    // Workerの節の表。1列が1人で、見出しの行に状態の絵文字と名前、次の行に担当中のタスクを書く。
+    // ジャンプできるワーカーの名前はリンクにし、押されたらJumpLinkと同じく、URLからセッションIDを取り出してタブを開く。
+    const WorkerTable = () => {
+      const hrefs = team.workers.filter(w => canJump(w.sessionId)).map(w => jumpHref(w.sessionId))
+      const head = team.workers.map(w => {
+        const name = escapeMarkdown(workerName(w))
+        return `${DOT_EMOJI[workerDot(w, team.tasks)]} ${canJump(w.sessionId) ? `[${name}](${jumpHref(w.sessionId)})` : name}`
+      })
+      const tasks = team.workers.map(w => escapeMarkdown(w.task ?? '-'))
+      // どの列も中央そろえにし、セルの中身の前後に改行なしの空白（U+00A0）を置いて、左右に余白を作る。ふつうの空白は、Markdownで消えるため。
+      const pad = (cell: string) => `${CELL_PAD}${cell}${CELL_PAD}`
+      const row = (cells: string[]) => `| ${cells.map(pad).join(' | ')} |`
+      const text = [row(head), `| ${team.workers.map(() => ':---:').join(' | ')} |`, row(tasks)].join('\n')
+      return hrefs.length === 0 ? (
+        <Markdown key="workers" text={text} />
+      ) : (
+        <Markdown
+          key="workers"
+          text={text}
+          pressableLinks={hrefs}
+          onLinkPress={async pressed => {
+            const sessionId = sessionOfHref(pressed.href)
+            if (canJump(sessionId)) await openUri($, sessionUri(sessionId), dir)
+          }}
+        />
+      )
+    }
+    // ワーカーの表示名。セッション名を省略して使い、まだ無ければ（参加を受け付ける前など）ワーカーIDにする。
+    const workerName = (w: Worker) => shorten(w.session !== '' ? w.session : w.id, WORKER_NAME_MAX)
+    const workerNameOf = (workerId: string | null) => {
+      const w = team.workers.find(x => x.id === workerId)
+      return w ? workerName(w) : (workerId ?? '-')
+    }
+    // ジャンプのリンク。押されたリンクのURLからセッションIDを取り出し、形を確かめてからタブを開く。
+    // Markdownは段落として描かれ、Textと横に並べると次の行に回り込むので、前後の文字（prefix、suffix）も同じMarkdownに入れる。
+    const JumpLink = (p: { id: string; label: string; sessionId: string; bold?: boolean; prefix?: string; suffix?: string }) => {
+      const href = jumpHref(p.sessionId)
+      const link = `[${escapeMarkdown(p.label)}](${href})`
+      return (
+        <Markdown
+          key={p.id}
+          text={`${escapeMarkdown(p.prefix ?? '')}${p.bold ? `**${link}**` : link}${escapeMarkdown(p.suffix ?? '')}`}
+          pressableLinks={[href]}
+          onLinkPress={async pressed => {
+            const sessionId = sessionOfHref(pressed.href)
+            if (canJump(sessionId)) await openUri($, sessionUri(sessionId), dir)
+          }}
+        />
+      )
+    }
 
     // どの節も、1列目が項目名かID、2列目が状態。セッション名とタスクの題名は最後の列に置き、幅が足りなければそこから切り詰められる。
     return (
       <Box flexDirection="column">
-        <Text bold>Team</Text>
+        <Heading first>Team</Heading>
         <Row id="team-id" cells={[<Line>ID:</Line>, <Line>{team.teamId}</Line>]} />
         <Row id="team-status" cells={[<Line>Status:</Line>, <Label status={state} />]} />
         <Row
@@ -519,7 +590,7 @@ export const register: Register = (on, options) => {
           cells={[
             <Line>Leader:</Line>,
             canJump(team.leaderSessionId) ? (
-              <IdButton id="jump-leader" label={team.leader} onPress={jump(team.leaderSessionId)} />
+              <JumpLink id="jump-leader" label={shorten(team.leader)} sessionId={team.leaderSessionId} />
             ) : (
               <Line>{team.leader}</Line>
             ),
@@ -535,50 +606,50 @@ export const register: Register = (on, options) => {
         />
         <Heading>Worker</Heading>
         {team.workers.length === 0 && <Text dimColor>まだいません</Text>}
-        {team.workers.map(w => (
-          <Row
-            id={w.id}
-            cells={[
-              // Taskの行の☑/☐に合わせて、先頭に箇条書きの記号を付ける。IDの後ろのコロンは、Teamの項目名（Status:など）と形をそろえ、IDと値を見分けやすくするため。
-              // ワーカーIDを押すと、そのワーカーのタブを前面に出す。
-              canJump(w.sessionId) ? (
-                <IdButton id={`jump-${w.id}`} label={`• ${w.id}:`} onPress={jump(w.sessionId)} />
-              ) : (
-                <Line>{`• ${w.id}:`}</Line>
-              ),
-              <Label status={statusOf(WORKER_STATUS, w.status)} />,
-              <Line>{w.task ?? '-'}</Line>,
-              <Line dimColor>{w.session}</Line>,
-            ]}
-          />
-        ))}
+        {/* ワーカーは、Markdownの表の列として横に並べる。見出しの行に状態の絵文字と名前、次の行に担当中のタスク。
+            表の罫線と列の位置は画面が描くので、VS Codeで文字の幅がそろわなくても、列がずれない。名前を押すと、そのワーカーのタブを前面に出す。 */}
+        {team.workers.length > 0 && <WorkerTable />}
         <Heading>Task</Heading>
-        {team.tasks.flatMap(t => {
-          const isDone = t.status === 'done'
-          const label = `${isDone ? '☑' : '☐'} ${t.id}:`
-          const isOpen = t.id in results
-          return [
-            <Row
-              id={t.id}
-              cells={[
-                // タスクIDを押すと、その下に「結果」の節を開く。もう一度押すと閉じる。
-                TASK_ID.test(t.id) ? (
-                  <IdButton id={`toggle-${t.id}`} label={label} dimColor={isDone} onPress={() => toggleResult($, team, dir, t.id)} />
-                ) : (
-                  <Line dimColor={isDone}>{label}</Line>
-                ),
-                <Label status={statusOf(TASK_STATUS, t.status)} />,
-                <Line dimColor={isDone}>{t.worker ?? '-'}</Line>,
-                <Line dimColor={isDone}>{t.title}</Line>,
-              ]}
-            />,
-            ...(isOpen ? [<ResultBody task={t} body={results[t.id] ?? null} />] : []),
-          ]
+        {team.tasks.map(t => {
+          const heading = `${t.id}: ${t.title}`
+          // 題名の後ろに、担当のワーカーの最後の報告の一言（team.json の note）を「 - 」でつなぐ。題名だけを太字にする。
+          const note = t.note !== '' ? ` - ${t.note}` : ''
+          const workerSession = sessionOf(t.worker)
+          // 1行目：状態の絵文字、「タスクID: 題名 - 一言」、右端に担当のワーカー。2行目から：要約（3行まで）。状態は絵文字の色だけで示し、語は書かない。
+          return (
+            <Box key={t.id} flexDirection="column">
+              <Box flexDirection="row">
+                <Box flexShrink={0}>
+                  <Text>{`${DOT_EMOJI[taskDot(t)]} `}</Text>
+                </Box>
+                <Box flexGrow={1}>
+                  {/* タスクIDと題名を押すと、担当のワーカーのタブを前面に出し、そのタスクの経緯をワーカーのタブで見られるようにする。 */}
+                  {canJump(workerSession) ? (
+                    <JumpLink id={`jump-task-${t.id}`} label={heading} sessionId={workerSession} bold suffix={note} />
+                  ) : (
+                    <Line>
+                      <Text bold>{heading}</Text>
+                      {note}
+                    </Line>
+                  )}
+                </Box>
+                <Box flexShrink={0} marginLeft={1}>
+                  <Text dimColor>{workerNameOf(t.worker)}</Text>
+                </Box>
+              </Box>
+              {(t.summary ?? []).map((line, i) => (
+                <Box key={`summary-${t.id}-${i}`} marginLeft={2}>
+                  <Line dimColor>{`${i === 0 ? '↳' : ' '} ${line}`}</Line>
+                </Box>
+              ))}
+            </Box>
+          )
         })}
         {graph && Svg && (
           <Box flexDirection="column">
             <Heading>Dependency</Heading>
-            <Svg source={graph.source} alt={graph.alt} />
+            {/* 大きさをSVGの本来の大きさに固定する。指定しないと、ペインの幅に合わせて拡大され、文字の大きさが変わるため。 */}
+            <Svg source={graph.source} alt={graph.alt} width={graph.width} height={graph.height} />
           </Box>
         )}
       </Box>
