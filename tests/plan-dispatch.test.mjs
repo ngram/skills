@@ -123,7 +123,28 @@ test("/rename で名前が変わっても、参照から新しい名前を探し
 
 test("タスクの題名を18文字以内にする決まりが、リーダーの手順と雛形の task.md にある", () => {
   assert.match(section(skill, "リーダーの手順"), /タスクの題名（`team\.json`の`title`と、タスクのファイルの見出し）は、18文字以内にする/u);
-  assert.match(task, /題名は18文字以内にする/u);
+  assert.match(task, /題名は18文字以内/u);
+});
+
+test("ワーカーが done と blocked の2行目に一言を書き、リーダーがタスクの note に書き、mod が表示する", () => {
+  const table = section(skill, "メッセージの形式");
+  assert.match(table, /\| `done` \|.*2行目に結果を一言（20文字以内）で書く/u);
+  assert.match(table, /\| `blocked` \|.*2行目に理由を一言（20文字以内）で書く/u);
+  assert.match(section(skill, "チームのファイル"), /`note`（担当のワーカーの最後の報告/u);
+  const steps = section(skill, "リーダーの手順");
+  assert.match(steps, /`done`にし、メッセージの2行目の一言をタスクの`note`に書く/u);
+  assert.match(steps, /`blocked`にし、メッセージの2行目の一言をタスクの`note`に書き/u);
+  assert.match(section(worker, "割り当てられたタスクを実行する"), /2行目には、結果を一言（20文字以内/u);
+  const mod = read(ROOT, "mods", "plan-dispatch-view", "hooks", "register.tsx");
+  assert.match(mod, /note: text\(t\.note\)/u);
+});
+
+test("結果の要約を3行以内にする決まりが、worker.md と雛形の task.md にある", () => {
+  // 進捗のペイン（mod）が、タスクの題名の下に要約の先頭の3行を表示するため。
+  assert.match(section(worker, "割り当てられたタスクを実行する"), /要約は3行以内にする/u);
+  assert.match(task, /要約は3行以内にする/u);
+  const mod = read(ROOT, "mods", "plan-dispatch-view", "hooks", "register.tsx");
+  assert.match(mod, /const SUMMARY_LINES = 3/u);
 });
 
 test("雛形のファイルがあり、SKILL.md がその名前で指す", () => {
