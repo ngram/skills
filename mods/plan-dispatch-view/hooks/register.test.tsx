@@ -54,13 +54,29 @@ const BASE = `${REPO}/plan/.dispatch`
 function engine(
   on: On,
   teams: Record<string, string[]> | null,
-  options: { mtimes?: Record<string, number>; sessionId?: string; repo?: boolean } = {},
+  options: {
+    mtimes?: Record<string, number>
+    sessionId?: string
+    repo?: boolean
+    root?: string
+    // チームのディレクトリからの相対パス（「<チームのディレクトリ>/tasks/T01.md」）から、本文への対応。無いパスは読めない。
+    files?: Record<string, string>
+    // process.run の終了コード。'throw' なら起動できなかったことにする。
+    exitCode?: number | 'throw'
+  } = {},
 ) {
   const opened: string[] = []
   const paths: string[] = []
+  const runs: string[][] = []
+  const toasts: string[] = []
   const counts: Record<string, number> = {}
-  // エンジンは、Windowsではパスの区切りを「\」にし、ドライブ名（「C:」）を付けて渡すので、「/」にそろえ、ドライブ名を除いて比べる。
-  const norm = (path: string) => path.replace(/\\/gu, '/').replace(/^[A-Za-z]:/u, '')
+  // エンジンは、Windowsではパスの区切りを「\」にし、ドライブ名（「C:」）を付けて渡すので、「/」にそろえ、「/work/repo」より前を除いて比べる。
+  // ルートを「C:/work/repo」にしたテストでも、Linuxではエンジンが作業ディレクトリを前に付けることがあるため、「/work/repo」から比べる。
+  const norm = (path: string) => {
+    const p = path.replace(/\\/gu, '/')
+    const i = p.indexOf(REPO)
+    return i === -1 ? p : p.slice(i)
+  }
   const nameOf = (path: string) => norm(path).slice(BASE.length + 1).split('/')[0] ?? ''
   on('command.register', () => ({ value: { command: 'plan-dispatch-view' } }))
   on('ui.open', (_, e) => {
@@ -70,8 +86,20 @@ function engine(
   // 読み直しのタイマーは、テストが時計を進めない限り動かない。
   mock.clock(on)
   on('session.repo', () => ({
-    value: options.repo === false ? null : { root: REPO, remote: null, internal: false, name: null },
+    value: options.repo === false ? null : { root: options.root ?? REPO, remote: null, internal: false, name: null },
   }))
+  on('process.run', (_, e) => {
+    runs.push([...e.argv])
+    if (options.exitCode === 'throw') throw new Error('spawn code ENOENT')
+    const exitCode = options.exitCode ?? 0
+    return {
+      value: { exitCode, stdout: '', stderr: exitCode === 0 ? '' : 'not found', isStdoutTruncated: false, isStderrTruncated: false },
+    }
+  })
+  on('ui.toast', (_, e) => {
+    toasts.push(e.text)
+    return { value: undefined }
+  })
   on('session.root', () => ({ value: WORKTREE }))
   on('session.id', () => ({ value: options.sessionId ?? ME }))
   on('fs.exists', (_, e) => {
@@ -89,6 +117,12 @@ function engine(
   }))
   on('fs.read', (_, e) => {
     paths.push(norm(e.path))
+    const rel = norm(e.path).slice(BASE.length + 1)
+    if (rel.includes('/tasks/')) {
+      const body = options.files?.[rel]
+      if (body === undefined) throw new Error(`ENOENT: ${rel}`)
+      return { value: body }
+    }
     const name = nameOf(e.path)
     const reads = teams?.[name] ?? ['']
     const n = counts[name] ?? 0
@@ -98,7 +132,7 @@ function engine(
   on('prompt.submit', (_, e) => ({ text: e.text }))
   on('command.run', () => ({ text: '' }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
-  return { opened, paths }
+  return { opened, paths, runs, toasts }
 }
 
 // 1つのチーム（20261115_sample）だけがあるときの teams。
@@ -137,6 +171,46 @@ test('ワーカーとタスクの表と進み具合を、vscodeとterminalの画
     }
     await ui.unmount()
   }
+})
+
+test('依存関係があれば、vscodeでは図を描き、terminalでは描かない', async ($, on) => {
+  const tasks = [
+    ...TEAM.tasks,
+    // 循環と、存在しないタスクへの依存があっても描ける。
+    { id: 'T04', title: '<仕上げ>', status: 'blocked', worker: null, dependsOn: ['T02', 'T03', 'T05', 'T99'] },
+    { id: 'T05', title: '循環', status: 'pending', worker: null, dependsOn: ['T04'] },
+  ]
+  engine(on, one(JSON.stringify({ ...TEAM, tasks })))
+  await $.session.start({ cwd: '/', surface: 'vscode', isInteractive: true })
+  await submit($, 'plan-dispatch', 'x')
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  expect(await ui.find({ type: 'Text', text: /^Dependency$/ })).toBeTruthy()
+  const svg = await ui.find({ type: 'Svg' })
+  const source = String(svg?.props.source)
+  expect(source).toMatch(/^<svg [^>]*>.*<\/svg>$/)
+  for (const id of ['T01', 'T02', 'T03', 'T04', 'T05']) expect(source).toContain(`>${id}</text>`)
+  expect(source).not.toContain('T99')
+  // 依存先が完了していれば実線、未完了なら破線。T02→T04、T03→T04、T05→T04、T04→T05 は破線、T01→T02 は実線。
+  expect(source.match(/<path d="M[^"]*" fill="none"[^>]*>/gu)?.length).toBe(5)
+  expect(source.match(/stroke-dasharray/gu)?.length).toBe(4)
+  expect(String(svg?.props.alt)).toContain('T02はT01に依存')
+  await ui.unmount()
+
+  const term = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await term.find({ type: 'Text', text: /^Dependency$/ })).toBeFalsy()
+  await term.unmount()
+})
+
+test('依存関係が無ければ、図を描かない', async ($, on) => {
+  const tasks = TEAM.tasks.map(t => ({ ...t, dependsOn: [] }))
+  engine(on, one(JSON.stringify({ ...TEAM, tasks })))
+  await $.session.start({ cwd: '/', surface: 'vscode', isInteractive: true })
+  await submit($, 'plan-dispatch', 'x')
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  expect(await ui.find({ type: 'Svg' })).toBeFalsy()
+  expect(await ui.find({ type: 'Text', text: /^Dependency$/ })).toBeFalsy()
+  await ui.unmount()
 })
 
 test('タスクIDが3桁でも、列の幅に収まる', async ($, on) => {
@@ -317,21 +391,44 @@ test('チームが複数あれば、このタブのセッションが記録さ�
   await submit($, 'plan-dispatch', 'x')
   const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
   expect(await ui.find({ type: 'Text', text: /^202611181000$/ }), 'ワーカーとして記録されているチームを表示していない').toBeTruthy()
-  expect(await ui.find({ type: 'Text', text: /参加していないチーム/ })).toBeFalsy()
   await ui.unmount()
 })
 
-test('このタブが関わるチームが無ければ、最も新しい進行中のチームを、参加していないことを添えて表示する', async ($, on) => {
-  const older = { ...TEAM, teamId: '202611181000', leaderSessionId: 'other' }
+test('このタブが関わるチームが無ければ、ほかのタブのチームを表示せず、まだ作成されていないことを描く', async ($, on) => {
+  // 新しいチームを作るリーダーのタブで、team.json を書く前。ほかのタブの進行中のチームと、完了したチームがある。
+  const active = { ...TEAM, teamId: '202611181000', leaderSessionId: 'other' }
   const done = { ...TEAM, teamId: '202611181200', leaderSessionId: 'other', status: 'done' }
-  engine(on, { '202611181000': [JSON.stringify(older)], '202611181200': [JSON.stringify(done)] }, {
+  engine(on, { '202611181000': [JSON.stringify(active)], '202611181200': [JSON.stringify(done)] }, {
     mtimes: { '202611181000': 1, '202611181200': 2 },
   })
   await $.session.start({ cwd: REPO, surface: 'vscode', isInteractive: true })
   await submit($, 'plan-dispatch', 'x')
-  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
-  expect(await ui.find({ type: 'Text', text: /^202611181000$/ }), '完了したチームより、進行中のチームを先に表示していない').toBeTruthy()
-  expect(await ui.find({ type: 'Text', text: /このタブが参加していないチーム/ })).toBeTruthy()
+  for (const placement of ['dock', 'inline'] as const) {
+    const ui = await $.ui.mount({ ...PANE, surface: 'vscode', props: { ...PANE.props, placement } })
+    expect(await ui.find({ type: 'Text', text: /このタブのチームは、まだ作成されていません/ }), `${placement}で未作成と描いていない`).toBeTruthy()
+    expect(await ui.find({ text: /20261118/ }), `${placement}でほかのタブのチームを描いている`).toBeFalsy()
+    expect(await ui.find({ type: 'Text', text: /チームがありません/ })).toBeFalsy()
+    await ui.unmount()
+  }
+})
+
+test('このタブのチームが作られたら、未作成の表示から、そのチームの表示に変わる', async ($, on) => {
+  const other = { ...TEAM, teamId: '202611181000', leaderSessionId: 'other' }
+  const mine = { ...TEAM, teamId: '202611181100' }
+  const teams: Record<string, string[]> = { '202611181000': [JSON.stringify(other)] }
+  engine(on, teams, { mtimes: { '202611181000': 2, '202611181100': 1 } })
+  await $.session.start({ cwd: REPO, surface: 'vscode', isInteractive: true })
+  await submit($, 'plan-dispatch', 'x')
+  let ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  expect(await ui.find({ type: 'Text', text: /まだ作成されていません/ })).toBeTruthy()
+  await ui.unmount()
+
+  // リーダーが team.json を書いたあとの読み直し。ほかのタブのチームのほうが新しくても、このタブのチームを表示する。
+  teams['202611181100'] = [JSON.stringify(mine)]
+  await submit($, 'plan-dispatch', 'x')
+  ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  expect(await ui.find({ type: 'Text', text: /^202611181100$/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /まだ作成されていません/ })).toBeFalsy()
   await ui.unmount()
 })
 
@@ -345,6 +442,178 @@ test('join で参加したタブは、そのチームを表示する', async ($,
   await submit($, 'plan-dispatch', 'join 202611181000 WA03 skills-e1')
   const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
   expect(await ui.find({ type: 'Text', text: /^202611181000$/ })).toBeTruthy()
+  await ui.unmount()
+})
+
+// 結果の表示とタブへのジャンプ。リーダーとWA01はセッションのIDを持ち、WA02は持たない（参加を受け付ける前）。
+const LEADER_ID = '11111111-1111-4111-8111-111111111111'
+const WA01_ID = '22222222-2222-4222-8222-222222222222'
+const JUMP = {
+  ...TEAM,
+  leaderSessionId: LEADER_ID,
+  workers: [{ ...TEAM.workers[0], sessionId: WA01_ID }, TEAM.workers[1]],
+}
+const T01_FILE = [
+  '# T01：雛形を書く',
+  '',
+  '## 目的',
+  '',
+  '雛形を用意する。',
+  '',
+  '## 結果',
+  '',
+  '### 要約',
+  '',
+  '雛形を書いた。',
+  '',
+  '### 変えたファイル',
+  '',
+  '- templates/a.md',
+  '',
+].join('\n')
+const T01_PATH = '20261115_sample/tasks/T01.md'
+
+test('タスクIDを押すと、その下に「結果」の節だけを開き、もう一度押すと閉じる', async ($, on) => {
+  engine(on, one(JSON.stringify(JUMP)), { sessionId: LEADER_ID, files: { [T01_PATH]: T01_FILE } })
+  await $.session.start({ cwd: REPO, surface: 'vscode', isInteractive: true })
+  await submit($, 'plan-dispatch', 'x')
+  let ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  expect(await ui.find({ type: 'Text', text: /^雛形を書いた。$/ })).toBeFalsy()
+  await ui.press({ key: 'toggle-T01' })
+  await ui.unmount()
+
+  ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  expect(await ui.find({ type: 'Text', text: /^### 要約$/ }), '結果の節を描いていない').toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /^雛形を書いた。$/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /^- templates\/a\.md$/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /雛形を用意する/ }), '結果の節のほかの節まで描いている').toBeFalsy()
+  // 行の並びは変わらず、T01の行のすぐ後ろに結果が入る。
+  expect((await ui.find({ key: 'T01' }))?.text).toMatch(/^☑ T01:\s*Done\s*WA02\s*雛形を書く$/)
+  await ui.press({ key: 'toggle-T01' })
+  await ui.unmount()
+
+  ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  expect(await ui.find({ type: 'Text', text: /^雛形を書いた。$/ }), 'もう一度押しても閉じない').toBeFalsy()
+  await ui.unmount()
+})
+
+test('開いている結果は、読み直しで新しくなり、読めないときは前の結果を残す', async ($, on) => {
+  const files: Record<string, string> = { [T01_PATH]: T01_FILE }
+  engine(on, one(JSON.stringify(JUMP)), { sessionId: LEADER_ID, files })
+  await $.session.start({ cwd: REPO, surface: 'vscode', isInteractive: true })
+  await submit($, 'plan-dispatch', 'x')
+  let ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  await ui.press({ key: 'toggle-T01' })
+  await ui.unmount()
+
+  // ワーカーが結果を書き直した。
+  files[T01_PATH] = T01_FILE.replace('雛形を書いた。', '雛形を書き直した。')
+  await submit($, 'plan-dispatch', 'x')
+  ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  expect(await ui.find({ type: 'Text', text: /^雛形を書き直した。$/ })).toBeTruthy()
+  await ui.unmount()
+
+  // 書いている途中で読めなかった。
+  delete files[T01_PATH]
+  await submit($, 'plan-dispatch', 'x')
+  ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  expect(await ui.find({ type: 'Text', text: /^雛形を書き直した。$/ })).toBeTruthy()
+  await ui.unmount()
+})
+
+test('タスクのファイルが無いか、「結果」の節が無ければ、その旨を描く', async ($, on) => {
+  engine(on, one(JSON.stringify(JUMP)), { sessionId: LEADER_ID, files: { '20261115_sample/tasks/T03.md': '# T03\n\n## 目的\n\nx\n' } })
+  await $.session.start({ cwd: REPO, surface: 'vscode', isInteractive: true })
+  await submit($, 'plan-dispatch', 'x')
+  let ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  await ui.press({ key: 'toggle-T02' })
+  await ui.press({ key: 'toggle-T03' })
+  await ui.unmount()
+  ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  expect(await ui.find({ type: 'Text', text: /タスクのファイルを読めません/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /「結果」の節がありません/ })).toBeTruthy()
+  await ui.unmount()
+})
+
+test('ワーカーIDを押すと、そのワーカーのセッションのタブをVS Codeのコマンドで開く', async ($, on) => {
+  const { runs } = engine(on, one(JSON.stringify(JUMP)), { sessionId: LEADER_ID })
+  await $.session.start({ cwd: REPO, surface: 'vscode', isInteractive: true })
+  await submit($, 'plan-dispatch', 'x')
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  await ui.press({ key: 'jump-WA01' })
+  expect(runs).toEqual([['code', '--open-url', `vscode://anthropic.claude-code/open?session=${WA01_ID}`]])
+  // セッションのIDが無いワーカーと、このタブ自身（リーダー）は、ボタンにしない。
+  expect(await ui.find({ key: 'jump-WA02' })).toBeFalsy()
+  expect(await ui.find({ key: 'jump-leader' })).toBeFalsy()
+  expect((await ui.find({ key: 'WA01' }))?.text).toMatch(/^• WA01:\s*Working\s*T02\s*skills-d3$/)
+  await ui.unmount()
+})
+
+test('ワーカーのタブでは、リーダーの名前を押すとリーダーのタブを開く', async ($, on) => {
+  const { runs } = engine(on, one(JSON.stringify(JUMP)), { sessionId: WA01_ID })
+  await $.session.start({ cwd: REPO, surface: 'vscode', isInteractive: true })
+  await submit($, 'plan-dispatch', 'x')
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  expect(await ui.find({ key: 'jump-WA01' }), 'このタブ自身をボタンにしている').toBeFalsy()
+  await ui.press({ key: 'jump-leader' })
+  expect(runs).toEqual([['code', '--open-url', `vscode://anthropic.claude-code/open?session=${LEADER_ID}`]])
+  await ui.unmount()
+})
+
+test('Windowsでは、code を cmd.exe で実行する', async ($, on) => {
+  const { runs } = engine(on, one(JSON.stringify(JUMP)), { sessionId: LEADER_ID, root: 'C:/work/repo' })
+  await $.session.start({ cwd: REPO, surface: 'vscode', isInteractive: true })
+  await submit($, 'plan-dispatch', 'x')
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  await ui.press({ key: 'jump-WA01' })
+  expect(runs[0]?.slice(0, 5)).toEqual(['cmd.exe', '/d', '/c', 'code', '--open-url'])
+  await ui.unmount()
+})
+
+test('「ファイルを開く」は、パスの空白と「&」を符号化したURIで、タスクのファイルを開く', async ($, on) => {
+  const dir = 'a b&c'
+  const { runs } = engine(on, { [dir]: [JSON.stringify(JUMP)] }, {
+    sessionId: LEADER_ID,
+    files: { [`${dir}/tasks/T01.md`]: T01_FILE },
+  })
+  await $.session.start({ cwd: REPO, surface: 'vscode', isInteractive: true })
+  await submit($, 'plan-dispatch', 'x')
+  let ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  await ui.press({ key: 'toggle-T01' })
+  await ui.unmount()
+  ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  await ui.press({ key: 'file-T01' })
+  expect(runs).toEqual([['code', '--open-url', 'vscode://file/work/repo/plan/.dispatch/a%20b%26c/tasks/T01.md']])
+  await ui.unmount()
+})
+
+for (const [exitCode, message] of [
+  [1, /終了コード1/],
+  ['throw', /codeを実行できません/],
+] as const) {
+  test(`VS Codeのコマンドが失敗しても（${exitCode}）、トーストで知らせ、ペインは描き続ける`, async ($, on) => {
+    const { toasts } = engine(on, one(JSON.stringify(JUMP)), { sessionId: LEADER_ID, exitCode })
+    await $.session.start({ cwd: REPO, surface: 'vscode', isInteractive: true })
+    await submit($, 'plan-dispatch', 'x')
+    const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+    await ui.press({ key: 'jump-WA01' })
+    expect(toasts.at(-1)).toMatch(message)
+    expect(await ui.find({ key: 'WA01' })).toBeTruthy()
+    await ui.unmount()
+  })
+}
+
+test('ターミナルでは、ジャンプのボタンを描かず、結果の開閉だけを描く', async ($, on) => {
+  engine(on, one(JSON.stringify(JUMP)), { sessionId: LEADER_ID, files: { [T01_PATH]: T01_FILE } })
+  await $.session.start({ cwd: REPO, surface: 'terminal', isInteractive: true })
+  await submit($, 'plan-dispatch', 'x')
+  let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ key: 'jump-WA01' })).toBeFalsy()
+  await ui.press({ key: 'toggle-T01' })
+  await ui.unmount()
+  ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /^雛形を書いた。$/ })).toBeTruthy()
+  expect(await ui.find({ key: 'file-T01' })).toBeFalsy()
   await ui.unmount()
 })
 
