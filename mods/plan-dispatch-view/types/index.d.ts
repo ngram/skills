@@ -38,9 +38,25 @@ export type View =
   | { kind: 'unknown-version'; version: string }
   | { kind: 'team'; team: Team; dir: string; self: string }
 
+// plan-dispatch の todo.json の1件のうち、このmodが読む部分。まだどのチームのタスクにもしていない作業。
+export type Todo = {
+  id: string
+  title: string
+  // 概要の、空でない行の先頭の3行まで。
+  summary: string[]
+  // 対応するPlanのファイルのパス。無ければ空。
+  plan: string
+  // 関連する、または先に終わる必要があるタスクやToDoの、名前かID。
+  related: string[]
+}
+
+// ToDoの表示。todo.json が無い、読めたToDoの一覧、知らない版。
+export type TodoView = { kind: 'none' } | { kind: 'list'; todos: Todo[] } | { kind: 'unknown-version'; version: string }
+
 declare module 'claude-code' {
   interface PluginState {
     'plan-dispatch-view': {
+      todos: Shaped<TodoView>
       view: Shaped<View>
       // join で参加したタブで表示するチームID。空なら、このタブのセッションのIDで選ぶ。
       teamId: Shaped<string>

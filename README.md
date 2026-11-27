@@ -58,7 +58,7 @@ modは、Claude Codeの画面に表示を足すプラグインで、Skillとは�
 <!-- skills:mods:begin（scripts/sync-skills.mjs が生成する。このブロックは手で編集しない） -->
 | mod | 説明 | ライセンス |
 | --- | --- | --- |
-| [plan-dispatch-view](mods/plan-dispatch-view/) | plan-dispatchのチームの進捗（ワーカーとタスクの状態、全体の進み具合）を表示するペイン | [MIT](LICENSE) |
+| [plan-dispatch-view](mods/plan-dispatch-view/) | plan-dispatchのチームの進捗（ワーカーとタスクの状態、全体の進み具合）とToDoを表示するペイン | [MIT](LICENSE) |
 <!-- skills:mods:end -->
 
 ## 開発

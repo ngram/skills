@@ -27,7 +27,7 @@ function section(text, heading) {
 const KINDS = ["invite", "join", "decline", "assign", "done", "blocked", "answer", "stop", "leader"];
 
 test("SKILL.md が、リーダーとワーカーの手順と、守る決まりの節を持つ", () => {
-  for (const h of ["引数", "チームのファイル", "メッセージの形式", "リーダーの手順", "ワーカーの手順", "呼び出しの重なりの決まり", "新しいタブの見つけ方と招待", "通知の見分け方", "ワーカーがいなくなったとき", "範囲の外の変更の見つけ方", "引き継ぎ", "守る決まり", "メッセージが届かないとき", "進捗のペイン（mod）"]) {
+  for (const h of ["引数", "チームのファイル", "メッセージの形式", "リーダーの手順", "ワーカーの手順", "呼び出しの重なりの決まり", "新しいタブの見つけ方と招待", "通知の見分け方", "ワーカーがいなくなったとき", "範囲の外の変更の見つけ方", "引き継ぎ", "守る決まり", "メッセージが届かないとき", "進捗のペイン（mod）", "ToDoの管理"]) {
     section(skill, h);
   }
   // ワーカーの手順は worker.md だけに書き、SKILL.md はそれを指す。
@@ -148,7 +148,7 @@ test("結果の要約を3行以内にする決まりが、worker.md と雛形の
 });
 
 test("雛形のファイルがあり、SKILL.md がその名前で指す", () => {
-  for (const name of ["team.json", "task.md", "worker.md"]) {
+  for (const name of ["team.json", "task.md", "worker.md", "todo.json"]) {
     assert.ok(existsSync(join(SKILL_DIR, "assets", name)), `assets/${name} が無い`);
     assert.match(skill, new RegExp(`assets/${name.replace(".", "\\.")}`, "u"), `SKILL.md が assets/${name} を指していない`);
   }
@@ -184,4 +184,30 @@ test("雛形の task.md が、手順で参照する節を持つ", () => {
   for (const h of ["編集してよいファイル", "確認の方法", "結果"]) {
     assert.match(worker, new RegExp(`「${h}」`, "u"), `worker.md が「${h}」を参照していない`);
   }
+});
+
+test("ToDoを plan/.dispatch/todo.json に1つにまとめ、雛形のキーを SKILL.md が説明し、mod が同じファイルと版を読む", () => {
+  const todo = section(skill, "ToDoの管理");
+  assert.match(todo, /ルートの`plan\/\.dispatch\/todo\.json`に1つにまとめて置く/u);
+  for (const key of ["id", "title", "summary", "plan", "related", "createdAt"]) {
+    assert.match(todo, new RegExp(`- \`${key}\`：`, "u"), `SKILL.md に todos[].${key} の説明が無い`);
+  }
+  const template = JSON.parse(read(SKILL_DIR, "assets", "todo.json"));
+  for (const key of ["version", "todos", "updatedAt"]) assert.ok(key in template, `todo.json に ${key} が無い`);
+  assert.ok(Array.isArray(template.todos));
+  const mod = read(ROOT, "mods", "plan-dispatch-view", "hooks", "register.tsx");
+  assert.match(mod, /const TODO_FILE = 'todo\.json'/u);
+  assert.equal(Number(mod.match(/const TODO_KNOWN_VERSION = (\d+)/u)?.[1]), template.version, "雛形の todo.json の version と、mod の TODO_KNOWN_VERSION が違う");
+});
+
+test("todo の引数でToDoを足し、タスクにしない作業と残った作業をToDoに入れ、実行するときはタスクに移して外す", () => {
+  assert.match(section(skill, "引数"), /最初の語が`todo`：ToDoを扱う/u);
+  const todo = section(skill, "ToDoの管理");
+  assert.match(todo, /環境や優先度の都合で今は割り当てない作業があるとき：捨てずにToDoに足す/u);
+  assert.match(todo, /今のチームのタスクとして足し（「進行中のチームへのタスクの追加」）、`todo\.json`から外す/u);
+  assert.match(todo, /ToDoを、ほかの理由で黙って外さない/u);
+  const steps = section(skill, "リーダーの手順");
+  assert.match(steps, /今は割り当てない作業は、タスクにせず、捨てずにToDoに足す/u);
+  assert.match(steps, /`todo\.json`に残っているToDoがあれば、その一覧もあわせて示す/u);
+  assert.match(section(worker, "守ること"), /`team\.json`と`todo\.json`は書かない/u);
 });
