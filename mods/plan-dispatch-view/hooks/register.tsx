@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { Color, EngineInterface, Register, RenderChildren } from 'claude-code'
 
-import type { Task, Team, View, Worker } from '../types'
+import type { Task, Team, Todo, TodoView, View, Worker } from '../types'
 
 const PANE = 'plan-dispatch-view'
 const TITLE = 'plan-dispatch'
@@ -38,6 +38,13 @@ const view = atom({ plugin: 'plan-dispatch-view', key: 'view' } as const, { kind
   shape: 'view-5',
 })
 const pinned = atom({ plugin: 'plan-dispatch-view', key: 'teamId' } as const, '', { shape: 'team-id-1' })
+// ToDoの一覧。チームとは別に、plan/.dispatch/todo.json から読む。
+const todos = atom({ plugin: 'plan-dispatch-view', key: 'todos' } as const, { kind: 'none' } as TodoView, { shape: 'todos-1' })
+// ToDoのファイル（チームのディレクトリと同じ plan/.dispatch に、リポジトリで1つ置く）と、その版。
+const TODO_FILE = 'todo.json'
+const TODO_KNOWN_VERSION = 1
+// ToDoの概要は、先頭の3行まで表示する（Skillで、概要を3行以内で書く決まり）。
+const TODO_SUMMARY_LINES = 3
 
 // ボタンからVS Codeのコマンドに渡す値の形。team.json の値をそのままシェル（Windowsの cmd.exe）に渡さないよう、この形のものだけを使う。
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu
@@ -313,8 +320,46 @@ function choose(candidates: Candidate[], pinnedId: string, sessionId: string): C
 
 // team.json を読み直す。
 // 書き込みの途中で今のチームの team.json が読めなかったときと、ディレクトリの一覧を読めなかったときは、前の表示を残す。
+// todo.json を読み、ToDoの一覧を表示の値にする。ファイルが無ければ none。
+// 書き込みの途中などで読めないとき、JSONとして読めないときは、前の表示を残す。
+async function refreshTodos($: EngineInterface, base: string): Promise<void> {
+  const file = `${base}/${TODO_FILE}`
+  let data: unknown
+  try {
+    if (!(await $.fs.exists(file))) {
+      await update($, todos, () => ({ kind: 'none' }) as TodoView)
+      return
+    }
+    data = JSON.parse(await $.fs.read(file))
+  } catch {
+    return
+  }
+  if (typeof data !== 'object' || data === null) return
+  const record = data as Record<string, unknown>
+  if (record.version !== TODO_KNOWN_VERSION) {
+    await update($, todos, () => ({ kind: 'unknown-version', version: String(record.version) }) as TodoView)
+    return
+  }
+  const list = Array.isArray(record.todos)
+    ? record.todos.filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null)
+    : []
+  const items: Todo[] = list.map(d => ({
+    id: text(d.id),
+    title: text(d.title),
+    summary: text(d.summary)
+      .split(/\r?\n/u)
+      .map(l => l.trim())
+      .filter(l => l !== '')
+      .slice(0, TODO_SUMMARY_LINES),
+    plan: text(d.plan).trim(),
+    related: Array.isArray(d.related) ? d.related.filter((r): r is string => typeof r === 'string' && r.trim() !== '') : [],
+  }))
+  await update($, todos, () => ({ kind: 'list', todos: items }) as TodoView)
+}
+
 async function refresh($: EngineInterface): Promise<void> {
   const base = await dispatchDir($)
+  await refreshTodos($, base)
   let entries: { name: string; kind: string }[]
   try {
     entries = (await $.fs.exists(base)) ? await $.fs.list(base) : []
@@ -468,7 +513,7 @@ export const register: Register = (on, options) => {
     // Boxには辺ごとの枠線が無いので、縦線は「▍」の文字で描く（ターミナルでも描ける）。最初の節（Team）だけ、上を空けない。
     const Heading = (p: { children: string; first?: boolean }) => (
       <Box key={`heading-${p.children}`} marginTop={p.first ? 0 : 1}>
-        {/* 見出しの文字は、本文（body）より1段大きいheadingにする。ターミナルは文字の大きさが1つなので、変わらない。 */}
+        {/* 見出しの文字は、本文（body）より2段大きいtitleにする。ターミナルは文字の大きさが1つなので、変わらない。 */}
         <Text color="claude" size="title">
           ▍
         </Text>
@@ -478,21 +523,78 @@ export const register: Register = (on, options) => {
       </Box>
     )
 
+    // ToDoの節。まだどのチームのタスクにもしていない作業を、ペインの最後に並べる。ToDoが無ければ描かない。
+    // ToDoはチームに属さないので、チームが無いときや、このタブのチームがまだ無いときにも描く。
+    const todoView = await read($, todos)
+    const todoCount = todoView.kind === 'list' ? todoView.todos.length : 0
+    const TodoSection = () => {
+      if (todoView.kind === 'unknown-version') {
+        return (
+          <Box key="todo" flexDirection="column">
+            <Heading>ToDo</Heading>
+            <Text>todo.jsonの版（{todoView.version}）に、このmodは対応していません。modを更新してください。</Text>
+          </Box>
+        )
+      }
+      if (todoView.kind !== 'list' || todoView.todos.length === 0) return null
+      return (
+        <Box key="todo" flexDirection="column">
+          <Heading>{`ToDo (${todoView.todos.length})`}</Heading>
+          {todoView.todos.map(d => {
+            // 1行目：☐、ToDoのIDとタスク名。2行目から：概要（3行まで）。最後に、対応するPlanと、関連するタスク。
+            const meta = [d.plan !== '' ? `Plan: ${d.plan}` : '', d.related.length > 0 ? `関連: ${d.related.join(', ')}` : '']
+              .filter(s => s !== '')
+              .join('   ')
+            return (
+              <Box key={`todo-${d.id}`} flexDirection="column">
+                <Line>
+                  <Text bold>{`☐ ${d.id}: ${d.title}`}</Text>
+                </Line>
+                {d.summary.map((line, i) => (
+                  <Box key={`todo-summary-${d.id}-${i}`} marginLeft={2}>
+                    <Line dimColor>{`${i === 0 ? '↳' : ' '} ${line}`}</Line>
+                  </Box>
+                ))}
+                {meta !== '' && (
+                  <Box key={`todo-meta-${d.id}`} marginLeft={4}>
+                    <Line dimColor>{meta}</Line>
+                  </Box>
+                )}
+              </Box>
+            )
+          })}
+        </Box>
+      )
+    }
+    // チームを描かないときも、メッセージの下にToDoの節を描く。
+    const WithTodos = (p: { children: RenderChildren }) => (
+      <Box flexDirection="column">
+        {p.children}
+        <TodoSection />
+      </Box>
+    )
+
     if (v.kind === 'none') {
-      return <Text dimColor>チームがありません（{v.dir}にteam.jsonが無い）。</Text>
+      return (
+        <WithTodos>
+          <Text dimColor>チームがありません（{v.dir}にteam.jsonが無い）。</Text>
+        </WithTodos>
+      )
     }
     if (v.kind === 'not-created') {
       return (
-        <Text dimColor>
-          このタブのチームは、まだ作成されていません。リーダーがチームを作るか、このタブがワーカーとして参加すると表示されます。
-        </Text>
+        <WithTodos>
+          <Text dimColor>
+            このタブのチームは、まだ作成されていません。リーダーがチームを作るか、このタブがワーカーとして参加すると表示されます。
+          </Text>
+        </WithTodos>
       )
     }
     if (v.kind === 'unknown-version') {
       return (
-        <Text>
-          team.jsonの版（{v.version}）に、このmodは対応していません。modを更新してください。
-        </Text>
+        <WithTodos>
+          <Text>team.jsonの版（{v.version}）に、このmodは対応していません。modを更新してください。</Text>
+        </WithTodos>
       )
     }
 
@@ -513,7 +615,7 @@ export const register: Register = (on, options) => {
           <Progress label="Progress:" value={done} max={max} valueText={`${done} / ${total}`} />
           <Line>
             <Label status={state} />
-            {`  Workers ${team.workers.length} (${working} working), Tasks ${done}/${total} done, ${blocked} blocked`}
+            {`  Workers ${team.workers.length} (${working} working), Tasks ${done}/${total} done, ${blocked} blocked${todoCount > 0 ? `, ToDo ${todoCount}` : ''}`}
           </Line>
         </Box>
       )
@@ -652,6 +754,7 @@ export const register: Register = (on, options) => {
             <Svg source={graph.source} alt={graph.alt} width={graph.width} height={graph.height} />
           </Box>
         )}
+        <TodoSection />
       </Box>
     )
   })

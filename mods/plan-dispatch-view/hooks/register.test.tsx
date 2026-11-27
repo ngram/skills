@@ -68,6 +68,8 @@ function engine(
     files?: Record<string, string>
     // process.run の終了コード。'throw' なら起動できなかったことにする。
     exitCode?: number | 'throw'
+    // plan/.dispatch/todo.json の本文の列。無ければ、ファイルが無いものとする。
+    todo?: string[]
   } = {},
 ) {
   const opened: string[] = []
@@ -109,6 +111,7 @@ function engine(
   on('session.id', () => ({ value: options.sessionId ?? ME }))
   on('fs.exists', (_, e) => {
     paths.push(norm(e.path))
+    if (norm(e.path) === `${BASE}/todo.json`) return { value: options.todo !== undefined }
     return { value: teams !== null && norm(e.path) === BASE }
   })
   on('fs.list', (_, e) => {
@@ -123,6 +126,14 @@ function engine(
   on('fs.read', (_, e) => {
     paths.push(norm(e.path))
     const rel = norm(e.path).slice(BASE.length + 1)
+    if (rel === 'todo.json') {
+      const reads = options.todo ?? []
+      const n = counts[rel] ?? 0
+      counts[rel] = n + 1
+      const body = reads[Math.min(n, reads.length - 1)]
+      if (body === undefined) throw new Error('ENOENT: todo.json')
+      return { value: body }
+    }
     if (rel.includes('/tasks/')) {
       const body = options.files?.[rel]
       if (body === undefined) throw new Error(`ENOENT: ${rel}`)
@@ -726,5 +737,99 @@ test('タスクの題名の後ろに、担当のワーカーの最後の報告�
   expect((await ui.find({ key: 'T03' }))?.text).toMatch(/^⚪ T03: READMEを書く - 仕様の確認待ち\s*-$/u)
   // 一言が無ければ、題名だけ。
   expect(String((await ui.find({ key: 'jump-task-T02' }))?.props.text)).toBe(`**[T02: テストを書く](${hrefOf(WA01_ID)})**`)
+  await ui.unmount()
+})
+
+const TODO = {
+  version: 1,
+  todos: [
+    {
+      id: 'TD01',
+      title: 'CIにLinuxを足す',
+      summary: 'GitHub ActionsにLinuxのジョブを足す。\nランナーの費用を確かめてから。\n3行目の概要。\n4行目は描かない。',
+      plan: 'plan/20261127_ci-linux.md',
+      related: ['T02', 'TD02'],
+      createdAt: '2026-11-27T10:00:00Z',
+    },
+    { id: 'TD02', title: '古い手順の削除', summary: '', plan: '', related: [], createdAt: '2026-11-27T10:05:00Z' },
+  ],
+  updatedAt: '2026-11-27T10:05:00Z',
+}
+
+test('ToDoは、ペインの最後に、IDとタスク名、概要（3行まで）、Planと関連するタスクを並べる', async ($, on) => {
+  engine(on, one(JSON.stringify(TEAM)), { todo: [JSON.stringify(TODO)] })
+  await $.session.start({ cwd: '/', surface: 'vscode', isInteractive: true })
+  await submit($, 'plan-dispatch', 'x')
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  expect((await ui.find({ key: 'heading-ToDo (2)' }))?.text).toBe('▍ToDo (2)')
+  // ToDoの節は、依存関係の図より後ろ（ペインの最後）に置く。
+  const all = String((await ui.findAll({ type: 'Box' }))[0]?.text)
+  expect(all.indexOf('▍ToDo (2)')).toBeGreaterThan(all.indexOf('▍Dependency'))
+  expect(all.indexOf('▍Dependency')).toBeGreaterThan(-1)
+  expect((await ui.find({ key: 'todo-TD01' }))?.text).toBe(
+    '☐ TD01: CIにLinuxを足す' +
+      '↳ GitHub ActionsにLinuxのジョブを足す。' +
+      '  ランナーの費用を確かめてから。' +
+      '  3行目の概要。' +
+      'Plan: plan/20261127_ci-linux.md   関連: T02, TD02',
+  )
+  // 概要もPlanも関連も無いToDoは、1行だけ。
+  expect((await ui.find({ key: 'todo-TD02' }))?.text).toBe('☐ TD02: 古い手順の削除')
+  await ui.unmount()
+})
+
+for (const [name, todo] of [
+  ['todo.json が無い', undefined],
+  ['ToDoが0件', [JSON.stringify({ ...TODO, todos: [] })]],
+] as const) {
+  test(`${name}なら、ToDoの節を描かない`, async ($, on) => {
+    engine(on, one(JSON.stringify(TEAM)), todo ? { todo: [...todo] } : {})
+    await $.session.start({ cwd: '/', surface: 'vscode', isInteractive: true })
+    await submit($, 'plan-dispatch', 'x')
+    const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+    expect(await ui.find({ text: /^▍ToDo/ })).toBeFalsy()
+    await ui.unmount()
+  })
+}
+
+test('チームが無いときと、このタブのチームがまだ無いときも、ToDoを描く', async ($, on) => {
+  engine(on, null, { todo: [JSON.stringify(TODO)] })
+  await $.session.start({ cwd: '/', surface: 'vscode', isInteractive: true })
+  await submit($, 'plan-dispatch', 'x')
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  expect(await ui.find({ type: 'Text', text: /チームがありません/ })).toBeTruthy()
+  expect(await ui.find({ key: 'todo-TD01' })).toBeTruthy()
+  await ui.unmount()
+})
+
+test('todo.json が読めないときは前のToDoを残し、知らない版なら更新を促す', async ($, on) => {
+  engine(on, one(JSON.stringify(TEAM)), {
+    todo: [JSON.stringify(TODO), '{"version": 1, "todos": [書きかけ', JSON.stringify({ ...TODO, version: 2 })],
+  })
+  await $.session.start({ cwd: '/', surface: 'vscode', isInteractive: true })
+  await submit($, 'plan-dispatch', 'x')
+  await submit($, 'plan-dispatch', 'x')
+  let ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  expect(await ui.find({ key: 'todo-TD01' }), '書きかけのときに、前のToDoを残していない').toBeTruthy()
+  await ui.unmount()
+  await submit($, 'plan-dispatch', 'x')
+  ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  expect((await ui.find({ type: 'Text', text: /todo\.jsonの版/ }))?.text).toMatch(/版（2）/)
+  expect(await ui.find({ key: 'todo-TD01' })).toBeFalsy()
+  await ui.unmount()
+})
+
+test('狭いとき（プロンプトの上）は、要約の行にToDoの件数を足す', async ($, on) => {
+  engine(on, one(JSON.stringify(TEAM)), { todo: [JSON.stringify(TODO)] })
+  await $.session.start({ cwd: '/', surface: 'vscode', isInteractive: true })
+  await submit($, 'plan-dispatch', 'x')
+  const ui = await $.ui.mount({
+    ...PANE,
+    surface: 'vscode',
+    props: { ...PANE.props, placement: 'inline', bodyColumns: 60, scroll: { offset: 0, bodyRows: 12 } },
+  })
+  expect((await ui.find({ type: 'Text', text: /Workers 2/ }))?.text).toBe(
+    'Active  Workers 2 (1 working), Tasks 1/3 done, 0 blocked, ToDo 2',
+  )
   await ui.unmount()
 })

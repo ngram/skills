@@ -48,7 +48,7 @@
     {
       "name": "plan-dispatch-view",
       "source": "./mods/plan-dispatch-view",
-      "description": "plan-dispatchのチームの進捗（ワーカーとタスクの状態、全体の進み具合）を表示するペイン"
+      "description": "plan-dispatchのチームの進捗（ワーカーとタスクの状態、全体の進み具合）とToDoを表示するペイン"
     }
   ]
 }
