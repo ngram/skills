@@ -9,12 +9,13 @@
 // mod の README.md は生成しない（mod は1つで、入れ方も手で書く）。
 //
 // あわせて、Skill と mod を公開できる状態かを検査する（name とディレクトリ名の一致など）。改行と見えない文字は、
-// リポジトリのすべてのテキストファイルについて調べる。
+// リポジトリにコミットされうるすべてのテキストファイル（.gitignore で除外したものを除く）について調べる。
 //
 // 使い方:
 //   node scripts/sync-skills.mjs           生成したファイルを書き込む
 //   node scripts/sync-skills.mjs --check   書き込まずに検査する（CI 用）。ずれや問題があれば終了コード1
 
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -97,11 +98,26 @@ function listFiles(dir) {
   });
 }
 
-// リポジトリのすべてのテキストファイルについて、改行が LF か、見えない文字が無いかを調べる。
+// 検査するファイル。git のリポジトリなら、コミットされうるファイル（追跡中のものと、.gitignore で
+// 除外していない未追跡のもの）に限る。.gitignore で除外したログなどは、リポジトリに入らないため。
+// git が無いか、リポジトリでなければ、ディレクトリをすべてたどる。
+function targetFiles() {
+  const r = spawnSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], {
+    cwd: ROOT,
+    encoding: "utf8",
+  });
+  if (r.error || r.status !== 0) return listFiles(ROOT);
+  return [...new Set(r.stdout.split("\0").filter(Boolean))]
+    .filter((rel) => !rel.split("/").some((part) => IGNORED_DIRS.has(part)))
+    .map((rel) => join(ROOT, rel))
+    .filter(isFile); // 作業ツリーで消したファイルは見ない
+}
+
+// コミットされうるテキストファイルについて、改行が LF か、見えない文字が無いかを調べる。
 // Skill のディレクトリの中身は利用者の環境にコピーされ、APM は見えない文字を警告する。
 function textProblems() {
   const problems = [];
-  for (const file of listFiles(ROOT)) {
+  for (const file of targetFiles()) {
     const buf = readFileSync(file);
     if (buf.includes(0)) continue; // バイナリは見ない
     const content = buf.toString("utf8");
@@ -381,13 +397,36 @@ function marketplaceJson(skills, mods) {
   return `${JSON.stringify(catalog, null, 2)}\n`;
 }
 
+// マーカーを、語の間の空白の有無を問わずに探す正規表現にする。日本語の文書の空白を除く道具（fix_spacing.mjs など）が
+// マーカーの中の空白（「sync-skills.mjs が」）を除くと、元のマーカーで探したときに生成したブロックが見つからず、
+// 新しいブロックを先頭に足して、ブロックが2つになったため。
+function markerPattern(marker) {
+  return marker
+    .trim()
+    .split(/\s+/u)
+    .map((w) => w.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"))
+    .join("\\s*");
+}
+
+// 生成したブロック（begin から end まで）の位置を、すべて返す。
+function findBlocks(text, begin, end) {
+  const re = new RegExp(`${markerPattern(begin)}[\\s\\S]*?${markerPattern(end)}`, "gu");
+  return [...text.matchAll(re)].map((m) => [m.index, m.index + m[0].length]);
+}
+
 // マーカーで囲んだブロックを差し替える。マーカーが無ければ、先頭（README.md は見出しの後）に置く。
+// ブロックが2つ以上あれば、最初のブロックを差し替え、残りのブロックを、直前の空白ごと除く。
 function splice(existing, block, begin, end) {
   if (existing === null || existing.trim() === "") return `${block}\n`;
-  const b = existing.indexOf(begin);
-  const e = existing.indexOf(end);
-  if (b !== -1 && e !== -1) return existing.slice(0, b) + block + existing.slice(e + end.length);
-  return `${block}\n\n${existing.trimStart()}`;
+  const blocks = findBlocks(existing, begin, end);
+  if (blocks.length === 0) return `${block}\n\n${existing.trimStart()}`;
+  let out = existing.slice(0, blocks[0][0]) + block;
+  let pos = blocks[0][1];
+  for (const [s, e] of blocks.slice(1)) {
+    out += existing.slice(pos, s).trimEnd();
+    pos = e;
+  }
+  return out + existing.slice(pos);
 }
 
 function main(argv) {
@@ -397,15 +436,26 @@ function main(argv) {
   const outputs = new Map();
   const read = (p) => (existsSync(p) ? readFileSync(p, "utf8") : null);
 
+  // 生成したブロックが2つ以上ある README.md。--check では失敗にし、生成するときは1つにまとめる。
+  const duplicates = [];
+  const countBlocks = (p, begin, end) => {
+    const n = findBlocks(read(p) ?? "", begin, end).length;
+    if (n > 1) duplicates.push(`${relative(ROOT, p)}: 生成したブロックが${n}個ある（1つにまとめる。node scripts/sync-skills.mjs を実行する）`);
+  };
+  const hasMarker = (text, begin) => text !== null && new RegExp(markerPattern(begin), "u").test(text);
+
   for (const s of skills) {
     const p = join(ROOT, s.dir, "README.md");
+    countBlocks(p, SKILL_BEGIN, SKILL_END);
     outputs.set(p, splice(read(p), skillReadmeBlock(s), SKILL_BEGIN, SKILL_END));
   }
   outputs.set(join(ROOT, ".claude-plugin", "marketplace.json"), marketplaceJson(skills, mods));
   const rootReadme = join(ROOT, "README.md");
-  if (read(rootReadme)?.includes(LIST_BEGIN)) {
+  if (hasMarker(read(rootReadme), LIST_BEGIN)) {
+    countBlocks(rootReadme, LIST_BEGIN, LIST_END);
+    countBlocks(rootReadme, MODS_BEGIN, MODS_END);
     let readme = splice(read(rootReadme), listBlock(skills), LIST_BEGIN, LIST_END);
-    if (readme.includes(MODS_BEGIN)) readme = splice(readme, modsBlock(mods), MODS_BEGIN, MODS_END);
+    if (hasMarker(readme, MODS_BEGIN)) readme = splice(readme, modsBlock(mods), MODS_BEGIN, MODS_END);
     else if (mods.length > 0) {
       console.error(`README.md に mod 一覧のマーカーが無い: ${MODS_BEGIN}`);
       return 1;
@@ -417,6 +467,14 @@ function main(argv) {
   }
 
   let failed = false;
+  for (const p of duplicates) {
+    if (check) {
+      console.error(p);
+      failed = true;
+    } else {
+      console.log(p.replace(/（1つにまとめる。.*）$/u, "。1つにまとめた"));
+    }
+  }
   for (const p of textProblems()) {
     console.error(p);
     failed = true;
