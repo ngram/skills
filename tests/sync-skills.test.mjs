@@ -145,9 +145,86 @@ test("mod があるのに README に mod 一覧のマーカーが無ければ失
   assert.match(r.stderr, /README\.md に mod 一覧のマーカーが無い/u);
 });
 
+test("マーカーの中の空白が除かれていても、生成したブロックとして置き換え、ブロックを足さない", () => {
+  const dir = fixture("計画の作成。");
+  assert.equal(sync(dir).status, 0);
+  const path = join(dir, "sample", "README.md");
+  const generated = readFileSync(path, "utf8");
+  // fix_spacing.mjs --fix が、マーカーの「sync-skills.mjs が」の空白を除いたときの形。
+  const squeezed = generated.replace("sync-skills.mjs が生成する", "sync-skills.mjsが生成する");
+  assert.notEqual(squeezed, generated);
+  writeFileSync(path, `${squeezed}\n## 使い方\n\n手で書いた部分\n`);
+  assert.equal(sync(dir).status, 0);
+  const readme = readFileSync(path, "utf8");
+  assert.equal(readme.match(/skills:readme:begin/gu).length, 1);
+  assert.match(readme, /sync-skills\.mjs が生成する/u);
+  assert.match(readme, /\n## 使い方\n\n手で書いた部分\n$/u);
+  assert.equal(sync(dir, "--check").status, 0);
+});
+
+test("生成したブロックが2つ以上あれば --check は失敗し、生成すると1つにまとめ、手で書いた部分を残す", () => {
+  const dir = fixture("計画の作成。");
+  assert.equal(sync(dir).status, 0);
+  const path = join(dir, "sample", "README.md");
+  const block = readFileSync(path, "utf8").trimEnd();
+  const old = block.replace("sync-skills.mjs が生成する", "sync-skills.mjsが生成する");
+  writeFileSync(path, `${block}\n\n${old}\n\n## 使い方\n\n手で書いた部分\n`);
+  const check = sync(dir, "--check");
+  assert.notEqual(check.status, 0);
+  assert.match(check.stderr, /sample[\\/]README\.md: 生成したブロックが2個ある/u);
+  const r = sync(dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /生成したブロックが2個ある。1つにまとめた/u);
+  assert.equal(readFileSync(path, "utf8"), `${block}\n\n## 使い方\n\n手で書いた部分\n`);
+  assert.equal(sync(dir, "--check").status, 0);
+});
+
 test("license に書いたファイルが Skill のディレクトリに無ければ失敗する", () => {
   const dir = fixture("計画の作成。", undefined, "Unlicense（LICENSE.txt）");
   const r = sync(dir);
   assert.notEqual(r.status, 0);
   assert.match(r.stderr, /sample: license に書いたファイル「LICENSE\.txt」が Skill のディレクトリに無い/);
+});
+
+// fixture を git のリポジトリにする。git が無ければ false を返す。
+function gitInit(dir) {
+  return spawnSync("git", ["init", "-q"], { cwd: dir }).status === 0;
+}
+
+// テストのソースに見えない文字そのものを書かないよう、コードポイントから作る。
+const BOM = String.fromCodePoint(0xfeff);
+const ZWSP = String.fromCodePoint(0x200b);
+
+test("git のリポジトリでは、.gitignore で除外したファイルの CRLF と見えない文字を指摘しない", (t) => {
+  const dir = fixture("計画の作成。");
+  if (!gitInit(dir)) return t.skip("git が無い");
+  assert.equal(sync(dir).status, 0);
+  writeFileSync(join(dir, ".gitignore"), "logs/\n");
+  mkdirSync(join(dir, "logs"));
+  writeFileSync(join(dir, "logs", "review.log"), `a\r\n${ZWSP}b\r\n`);
+  const check = sync(dir, "--check");
+  assert.equal(check.status, 0, check.stderr);
+});
+
+test("git のリポジトリでも、追跡中と未追跡のファイルの CRLF と見えない文字は指摘する", (t) => {
+  const dir = fixture("計画の作成。");
+  if (!gitInit(dir)) return t.skip("git が無い");
+  assert.equal(sync(dir).status, 0);
+  writeFileSync(join(dir, "sample", "tracked.md"), "a\r\n");
+  spawnSync("git", ["add", "sample/tracked.md"], { cwd: dir });
+  writeFileSync(join(dir, "sample", "untracked.md"), `a\n${BOM}b\n`);
+  const check = sync(dir, "--check");
+  assert.notEqual(check.status, 0);
+  assert.match(check.stderr, /sample[\\/]tracked\.md: 改行が LF でない/u);
+  assert.match(check.stderr, /sample[\\/]untracked\.md:2: 見えない文字/u);
+});
+
+test("git のリポジトリでなければ、すべてのファイルの CRLF を指摘する", () => {
+  const dir = fixture("計画の作成。");
+  assert.equal(sync(dir).status, 0);
+  mkdirSync(join(dir, "logs"));
+  writeFileSync(join(dir, "logs", "review.log"), "a\r\n");
+  const check = sync(dir, "--check");
+  assert.notEqual(check.status, 0);
+  assert.match(check.stderr, /logs[\\/]review\.log: 改行が LF でない/u);
 });
