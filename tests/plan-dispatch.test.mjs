@@ -200,6 +200,33 @@ test("ToDoを plan/.dispatch/todo.json に1つにまとめ、雛形のキーを 
   assert.equal(Number(mod.match(/const TODO_KNOWN_VERSION = (\d+)/u)?.[1]), template.version, "雛形の todo.json の version と、mod の TODO_KNOWN_VERSION が違う");
 });
 
+test("新しいタブを頼むときは、流用できるワーカーを先に確かめ、タブごとに /rename と参加のコマンドを2回に分けて示す", () => {
+  const ask = section(skill, "新しいタブを頼むとき");
+  assert.match(ask, /流用できるワーカーで足りるときは、新しいタブを頼まず、コマンドも示さない/u);
+  for (const scene of ["チームを作ったとき", "進行中のチームにタスクを足したとき", "招待の候補が頼んだ数より少なかったとき", "ワーカーがいなくなったとき"]) {
+    assert.match(ask, new RegExp(`^- ${scene}`, "mu"), `「${scene}」の場面が無い`);
+  }
+  // コマンドのブロックは、/rename が先、参加のコマンドがあとの2行。
+  const block = ask.match(/```text\n([\s\S]*?)```/u)?.[1].trim().split("\n");
+  assert.equal(block?.length, 2);
+  assert.match(block[0], /^\/rename WA\d{2}$/u);
+  assert.match(block[1], / join \S+ WA\d{2} \S+$/u);
+  assert.match(ask, /1行ずつ、2回に分けて入力する/u);
+  assert.match(ask, /2行目も`\/rename`の引数になり/u);
+  // リーダーの手順と、ほかの場面から、この節を指している。
+  assert.match(section(skill, "リーダーの手順"), /「新しいタブを頼むとき」/u);
+  assert.match(section(skill, "進行中のチームへのタスクの追加"), /「新しいタブを頼むとき」/u);
+  assert.match(section(skill, "ワーカーがいなくなったとき"), /「新しいタブを頼むとき」/u);
+  assert.doesNotMatch(section(skill, "リーダーの手順"), /何も入力しなくてよい/u);
+  // 招待では、セッション名がワーカーIDと同じ候補にそのIDを振り、対応を確かめずに招待する。
+  const invite = section(skill, "新しいタブの見つけ方と招待");
+  assert.match(invite, /セッション名が、このチームのまだ使われていないワーカーIDと同じ候補には、そのIDを振る/u);
+  assert.match(invite, /セッション名とワーカーIDが同じ候補は、利用者が`\/rename`でそのIDを指定したものなので、確かめずに招待し/u);
+  // ワーカーは、名前が既にワーカーIDなら、/rename を重ねて案内しない。
+  assert.match(section(worker, "参加する"), /ワーカーIDと違うときだけ/u);
+  assert.match(read(SKILL_DIR, "README.md"), /1行ずつ、2回に分けて入力する/u);
+});
+
 test("todo の引数でToDoを足し、タスクにしない作業と残った作業をToDoに入れ、実行するときはタスクに移して外す", () => {
   assert.match(section(skill, "引数"), /最初の語が`todo`：ToDoを扱う/u);
   const todo = section(skill, "ToDoの管理");
